@@ -21,6 +21,7 @@
     "dev": "next dev  -p 1111",
     "build": "set NODE_ENV=production & next build",
     "start": "prisma migrate & prisma db seed & next start -p 1111",
+    "vercel-build": "prisma generate && prisma migrate deploy && prisma db seed && next build",
     "lint": "next lint",
     "analyze": "ANALYZE=true next build",
     "postinstall": "pnpm generate"
