@@ -1,15 +1,26 @@
 import { _ } from '@/lib/lodash';
+import "pdf-parse";
 import { ChatOpenAI, ClientOptions, OpenAIEmbeddings, } from "@langchain/openai";
 import path from 'path';
+import fs from 'fs';
 import type { Document } from "@langchain/core/documents";
 import { AIMessage, HumanMessage, SystemMessage } from '@langchain/core/messages';
 import { ChatPromptTemplate, MessagesPlaceholder } from "@langchain/core/prompts";
 import { StringOutputParser } from '@langchain/core/output_parsers';
 import { OpenAIWhisperAudio } from "@langchain/community/document_loaders/fs/openai_whisper_audio";
 import { prisma } from '../prisma';
-import { FAISS_PATH } from '@/lib/constant';
+import { FAISS_PATH, UPLOAD_FILE_PATH } from '@/lib/constant';
 import { AiModelFactory } from './ai/aiModelFactory';
 import { ProgressResult } from './memos';
+import { PDFLoader } from "@langchain/community/document_loaders/fs/pdf";
+import { DocxLoader } from "@langchain/community/document_loaders/fs/docx";
+import { CSVLoader } from "@langchain/community/document_loaders/fs/csv";
+import { TextLoader } from "langchain/document_loaders/fs/text";
+import { UnstructuredLoader } from "@langchain/community/document_loaders/fs/unstructured";
+import { FaissStore } from '@langchain/community/vectorstores/faiss';
+import { BaseDocumentLoader } from '@langchain/core/document_loaders/base';
+import { FileService } from './utils';
+import { AiPrompt } from './ai/aiPrompt';
 
 //https://js.langchain.com/docs/introduction/
 //https://smith.langchain.com/onboarding
@@ -17,21 +28,71 @@ import { ProgressResult } from './memos';
 const FaissStorePath = path.join(process.cwd(), FAISS_PATH);
 
 export class AiService {
-  static async embeddingUpsert({ id, content, type }: { id: number, content: string, type: 'update' | 'insert' }) {
+  static async loadFileContent(filePath: string): Promise<string> {
     try {
-      const { VectorStore, Splitter } = await AiModelFactory.GetProvider()
-      const chunks = await Splitter.splitText(content);
-      console.log('3. 分割完成', { chunks })
-
-      if (type == 'update') {
-        console.log('4. 执行更新操作')
-        // ... existing delete logic ...
+      let loader: BaseDocumentLoader;
+      switch (true) {
+        case filePath.endsWith('.pdf'):
+          console.log('load pdf')
+          loader = new PDFLoader(filePath);
+          break;
+        case filePath.endsWith('.docx') || filePath.endsWith('.doc'):
+          console.log('load docx')
+          loader = new DocxLoader(filePath);
+          break;
+        case filePath.endsWith('.txt'):
+          console.log('load txt')
+          loader = new TextLoader(filePath);
+          break;
+        // case filePath.endsWith('.csv'):
+        //   console.log('load csv')
+        //   loader = new CSVLoader(filePath);
+        //   break;
+        default:
+          loader = new UnstructuredLoader(filePath);
       }
+      const docs = await loader.load();
+      return docs.map(doc => doc.pageContent).join('\n');
+    } catch (error) {
+      console.error('File loading error:', error);
+      throw new Error(`can not load file: ${filePath}`);
+    }
+  }
 
-      console.log('5. 准备创建文档')
+  static async embeddingDeleteAll(id: number, VectorStore: FaissStore) {
+    for (const index of new Array(9999).keys()) {
+      console.log('delete', `${id}-${index}`)
+      try {
+        await VectorStore.delete({ ids: [`${id}-${index}`] })
+        await VectorStore.save(FaissStorePath)
+      } catch (error) {
+        console.log('error', error)
+        break;
+      }
+    }
+  }
+
+  static async embeddingDeleteAllAttachments(filePath: string, VectorStore: FaissStore) {
+    for (const index of new Array(9999).keys()) {
+      try {
+        await VectorStore.delete({ ids: [`${filePath}-${index}`] })
+        await VectorStore.save(FaissStorePath)
+      } catch (error) {
+        break;
+      }
+    }
+  }
+
+  static async embeddingUpsert({ id, content, type, createTime }: { id: number, content: string, type: 'update' | 'insert', createTime: Date }) {
+    try {
+      const { VectorStore, MarkdownSplitter } = await AiModelFactory.GetProvider()
+      const chunks = await MarkdownSplitter.splitText(content);
+      if (type == 'update') {
+        await AiService.embeddingDeleteAll(id, VectorStore)
+      }
       const documents: Document[] = chunks.map((chunk, index) => {
         return {
-          pageContent: chunk,
+          pageContent: chunk + `\n\nCreated at: ${createTime.toISOString()}`,
           metadata: { noteId: id, uniqDocId: `${id}-${index}` },
         }
       })
@@ -56,31 +117,101 @@ export class AiService {
       await VectorStore.save(FaissStorePath)
       return { ok: true }
     } catch (error) {
+      return { ok: false, error: error?.message }
+    }
+  }
+
+  //api/file/123.pdf
+  static async embeddingInsertAttachments({ id, filePath }: { id: number, filePath: string }) {
+    try {
+      // const note = await prisma.notes.findUnique({ where: { id } })
+      // //@ts-ignore
+      // if (note?.metadata?.isAttachmentsIndexed) {
+      //   return { ok: true, msg: 'already indexed' }
+      // }
+      const absolutePath = await FileService.getFile(filePath)
+      const content = await AiService.loadFileContent(absolutePath);
+      const { VectorStore, TokenTextSplitter } = await AiModelFactory.GetProvider()
+      const chunks = await TokenTextSplitter.splitText(content);
+      const documents: Document[] = chunks.map((chunk, index) => {
+        return {
+          pageContent: chunk,
+          metadata: {
+            noteId: id,
+            uniqDocId: `${filePath}-${index}`
+          },
+        }
+      })
+
+      try {
+        await prisma.notes.update({
+          where: { id },
+          data: {
+            metadata: {
+              isIndexed: true,
+              isAttachmentsIndexed: true
+            }
+          }
+        })
+      } catch (error) {
+        console.log(error)
+      }
+
+      const BATCH_SIZE = 5;
+      for (let i = 0; i < documents.length; i += BATCH_SIZE) {
+        const batch = documents.slice(i, i + BATCH_SIZE);
+        const batchIds = batch.map(doc => doc.metadata.uniqDocId);
+        await VectorStore.addDocuments(batch, { ids: batchIds });
+      }
+
+      await VectorStore.save(FaissStorePath)
+      return { ok: true }
+    } catch (error) {
       return { ok: false, error }
     }
   }
 
+
+
   static async embeddingDelete({ id }: { id: number }) {
     const { VectorStore } = await AiModelFactory.GetProvider()
-    for (const index of new Array(999).keys()) {
-      try {
-        await VectorStore.delete({ ids: [`${id}-${index}`] })
-      } catch (error) {
-        console.log(error)
-        break;
-      }
+    await AiService.embeddingDeleteAll(id, VectorStore)
+    const attachments = await prisma.attachments.findMany({ where: { noteId: id } })
+    for (const attachment of attachments) {
+      console.log({ deletPath: attachment.path })
+      await AiService.embeddingDeleteAllAttachments(attachment.path, VectorStore)
     }
     return { ok: true }
   }
 
   static async similaritySearch({ question }: { question: string }) {
-    const { VectorStore } = await AiModelFactory.GetProvider()
-    const result = await VectorStore.similaritySearch(question, 2);
-    return result
+    const { VectorStore, } = await AiModelFactory.GetProvider()
+    const config = await AiModelFactory.globalConfig()
+    const topK = config.embeddingTopK ?? 2
+    const lambda = config.embeddingLambda ?? 0.5
+    const score = config.embeddingScore ?? 1.5
+    const results = await VectorStore.similaritySearchWithScore(question, topK, {
+      fetchK: topK * 3,
+      lambda: lambda
+    });
+    console.log('similaritySearch with scores:', results)
+    const DISTANCE_THRESHOLD = score;
+    const filteredResults = results
+      .filter(([doc, distance]) => distance < DISTANCE_THRESHOLD)
+      .map(([doc]) => doc);
+    return filteredResults;
   }
 
-  static async *rebuildEmbeddingIndex(): AsyncGenerator<ProgressResult & { progress?: { current: number, total: number } }, void, unknown> {
-    const notes = await prisma.notes.findMany();
+  static async *rebuildEmbeddingIndex({ force = false }: { force?: boolean }): AsyncGenerator<ProgressResult & { progress?: { current: number, total: number } }, void, unknown> {
+    if (force) {
+      const faissPath = path.join(process.cwd(), FAISS_PATH)
+      fs.rmSync(faissPath, { recursive: true, force: true })
+    }
+    const notes = await prisma.notes.findMany({
+      include: {
+        attachments: true
+      }
+    });
     const total = notes.length;
     const BATCH_SIZE = 5;
 
@@ -93,8 +224,7 @@ export class AiService {
         current++;
         try {
           //@ts-ignore
-          if (note.metadata?.isIndexed) {
-            console.log('skip note:', note.id);
+          if (note.metadata?.isIndexed && !force) {
             yield {
               type: 'skip' as const,
               content: note.content.slice(0, 30),
@@ -102,19 +232,54 @@ export class AiService {
             };
             continue;
           }
+          if (note?.content != '') {
+            const { ok, error } = await AiService.embeddingUpsert({
+              createTime: note.createdAt,
+              id: note?.id,
+              content: note?.content,
+              type: 'update' as const
+            });
+            if (ok) {
+              yield {
+                type: 'success' as const,
+                content: note?.content.slice(0, 30) ?? '',
+                progress: { current, total }
+              };
+            } else {
+              yield {
+                type: 'error' as const,
+                content: note?.content.slice(0, 30) ?? '',
+                error,
+                progress: { current, total }
+              };
+            }
+          }
+          //@ts-ignore
+          if (note?.attachments) {
+            //@ts-ignore
+            for (const attachment of note?.attachments) {
+              const { ok, error } = await AiService.embeddingInsertAttachments({
+                id: note?.id,
+                filePath: attachment?.path
+              });
+              if (ok) {
+                yield {
+                  type: 'success' as const,
+                  content: decodeURIComponent(attachment?.path),
+                  progress: { current, total }
+                };
+              } else {
+                yield {
+                  type: 'error' as const,
+                  content: decodeURIComponent(attachment?.path),
+                  error,
+                  progress: { current, total }
+                };
+              }
+            }
+          }
 
-          await AiService.embeddingUpsert({
-            id: note?.id,
-            content: note?.content,
-            type: 'insert' as const
-          });
-          yield {
-            type: 'success' as const,
-            content: note?.content.slice(0, 30) ?? '',
-            progress: { current, total }
-          };
         } catch (error) {
-          console.error('rebuild index error->', error);
           yield {
             type: 'error' as const,
             content: note.content.slice(0, 30),
@@ -126,30 +291,6 @@ export class AiService {
     }
   }
 
-  static getQAPrompt() {
-    const systemPrompt =
-    "You are a versatile AI assistant who can: \n" +
-    "1. Answer questions and explain concepts\n" +
-    "2. Provide suggestions and analysis\n" +
-    "3. Help with planning and organizing ideas\n" +
-    "4. Assist with content creation and editing\n" +
-    "5. Perform basic calculations and reasoning\n\n" +
-    "Use the following context to assist with your responses: \n" +
-    "{context}\n\n" +
-    "If a request is beyond your capabilities, please be honest about it.\n" +
-    "Always respond in the user's language.\n" +
-    "Maintain a friendly and professional conversational tone.";
-
-    const qaPrompt = ChatPromptTemplate.fromMessages(
-      [
-        ["system", systemPrompt],
-        new MessagesPlaceholder("chat_history"),
-        ["human", "{input}"]
-      ]
-    )
-
-    return qaPrompt
-  }
 
   static getChatHistory({ conversations }: { conversations: { role: string, content: string }[] }) {
     const conversationMessage = conversations.map(i => {
@@ -162,10 +303,39 @@ export class AiService {
     return conversationMessage
   }
 
+  static async enhanceQuery({ query }: { query: string }) {
+    const { VectorStore } = await AiModelFactory.GetProvider()
+    const config = await AiModelFactory.globalConfig()
+    const results = await VectorStore.similaritySearchWithScore(query, 20);
+    const DISTANCE_THRESHOLD = config.embeddingScore ?? 1.5
+    const filteredResultsWithScore = results
+      .filter(([doc, distance]) => distance < DISTANCE_THRESHOLD)
+      .sort(([, distanceA], [, distanceB]) => distanceA - distanceB)
+      .map(([doc, distance]) => ({
+        doc,
+        distance
+      }));
+    console.log(filteredResultsWithScore)
+    const notes = await prisma.notes.findMany({
+      where: {
+        id: { in: filteredResultsWithScore.map(i => i.doc.metadata?.noteId).filter(i => !!i) },
+      },
+      include: { tags: { include: { tag: true } }, attachments: true }
+    })
+    const sortedNotes = notes.sort((a, b) => {
+      const scoreA = filteredResultsWithScore.find(r => r.doc.metadata?.noteId === a.id)?.distance ?? Infinity;
+      const scoreB = filteredResultsWithScore.find(r => r.doc.metadata?.noteId === b.id)?.distance ?? Infinity;
+      return scoreA - scoreB;
+    });
+
+    return sortedNotes;
+  }
+
   static async completions({ question, conversations }: { question: string, conversations: { role: string, content: string }[] }) {
     try {
       const { LLM } = await AiModelFactory.GetProvider()
       let searchRes = await AiService.similaritySearch({ question })
+      console.log('searchRes', searchRes)
       let notes: any[] = []
       if (searchRes && searchRes.length != 0) {
         notes = await prisma.notes.findMany({
@@ -173,6 +343,9 @@ export class AiService {
             id: {
               in: _.uniqWith(searchRes.map(i => i.metadata?.noteId)).filter(i => !!i) as number[]
             }
+          },
+          include: {
+            attachments: true
           }
         })
       }
@@ -180,17 +353,79 @@ export class AiService {
       //@ts-ignore
       notes.sort((a, b) => a.index! - b.index!)
       const chat_history = AiService.getChatHistory({ conversations })
-      const qaPrompt = AiService.getQAPrompt()
+      const qaPrompt = AiPrompt.QAPrompt()
       const qaChain = qaPrompt.pipe(LLM).pipe(new StringOutputParser())
       const result = await qaChain.stream({
         chat_history,
         input: question,
-        context: notes?.map(i => i.content)
+        context: searchRes[0]?.pageContent
       })
       return { result, notes }
     } catch (error) {
       console.log(error)
       throw new Error(error)
+    }
+  }
+
+  static async autoTag({ content, tags }: { content: string, tags: string[] }) {
+    try {
+      const { LLM } = await AiModelFactory.GetProvider();
+      const autoTagPrompt = AiPrompt.AutoTagPrompt(tags);
+      const autoTagChain = autoTagPrompt.pipe(LLM).pipe(new StringOutputParser());
+
+      const result = await autoTagChain.invoke({
+        question: "Please select and suggest appropriate tags for the above content",
+        context: content
+      });
+
+      return result.trim().split(',').map(tag => tag.trim()).filter(Boolean);
+    } catch (error) {
+      console.log(error);
+      throw new Error(error);
+    }
+  }
+
+  static async autoEmoji({ content }: { content: string }) {
+    try {
+      const { LLM } = await AiModelFactory.GetProvider();
+      const autoTagPrompt = AiPrompt.AutoEmojiPrompt();
+      const autoTagChain = autoTagPrompt.pipe(LLM).pipe(new StringOutputParser());
+
+      const result = await autoTagChain.invoke({
+        question: "Please select and suggest appropriate emojis for the above content",
+        context: content
+      });
+
+      return result.trim().split(',').map(tag => tag.trim()).filter(Boolean);
+    } catch (error) {
+      console.log(error);
+      throw new Error(error);
+    }
+  }
+
+  static async writing({
+    question,
+    type = 'custom',
+    content
+  }: {
+    question: string,
+    type?: 'expand' | 'polish' | 'custom',
+    content?: string
+  }) {
+    try {
+      const { LLM } = await AiModelFactory.GetProvider();
+      const writingPrompt = AiPrompt.WritingPrompt(type, content);
+      const writingChain = writingPrompt.pipe(LLM).pipe(new StringOutputParser());
+
+      const result = await writingChain.stream({
+        question,
+        content: content || ''
+      });
+
+      return { result };
+    } catch (error) {
+      console.log(error);
+      throw new Error(error);
     }
   }
 

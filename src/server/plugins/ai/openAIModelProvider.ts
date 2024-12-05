@@ -1,5 +1,5 @@
 import { ChatOpenAI, OpenAIEmbeddings } from '@langchain/openai';
-import { MarkdownTextSplitter } from "@langchain/textsplitters"
+import { MarkdownTextSplitter, TokenTextSplitter } from "@langchain/textsplitters"
 import { FaissStore } from "@langchain/community/vectorstores/faiss"
 import path from "path"
 import { FAISS_PATH } from "@/lib/constant"
@@ -19,12 +19,20 @@ export abstract class AiBaseModelPrivider {
   abstract LLM(): BaseChatModel;
   abstract Embeddings(): Embeddings
 
-  public Splitter(): MarkdownTextSplitter {
+  public MarkdownSplitter(): MarkdownTextSplitter {
     return new MarkdownTextSplitter({
-      chunkSize: 100,
-      chunkOverlap: 50,
+      chunkSize: 2000,
+      chunkOverlap: 200,
     });
   }
+
+  public TokenTextSplitter(): TokenTextSplitter {
+    return new TokenTextSplitter({
+      chunkSize: 2000,
+      chunkOverlap: 200,
+    });
+  }
+
 
   public async VectorStore(): Promise<FaissStore> {
     const FaissStorePath = path.join(process.cwd(), FAISS_PATH)
@@ -34,14 +42,21 @@ export abstract class AiBaseModelPrivider {
         this.Embeddings()
       );
     } catch (error) {
-      const VectorStore = new FaissStore(this.Embeddings(), {});
-      const documents = [{
-        pageContent: "init faiss store",
-        metadata: { id: '0' },
-      }];
-      await VectorStore.addDocuments(documents, { ids: ["0"] });
-      await VectorStore.save(FaissStorePath)
-      return VectorStore
+      try {
+        console.log(this.globalConfig)
+        const VectorStore = new FaissStore(this.Embeddings(), {});
+        const documents = [{
+          pageContent: "init faiss store",
+          metadata: { id: '0' },
+        }];
+        console.log('init faiss store', documents)
+        await VectorStore.addDocuments(documents, { ids: ["0"] });
+        await VectorStore.save(FaissStorePath)
+        return VectorStore
+      } catch (error) {
+        console.log('VectorStore error', error)
+        throw error
+      }
     }
   }
 
@@ -75,6 +90,7 @@ export class OpenAIModelProvider extends AiBaseModelPrivider {
   Embeddings() {
     return new OpenAIEmbeddings({
       apiKey: this.globalConfig.aiApiKey,
+      model: this.globalConfig.embeddingModel ?? 'text-embedding-3-small',
     }, {
       baseURL: this.globalConfig.aiApiEndpoint || null
     })

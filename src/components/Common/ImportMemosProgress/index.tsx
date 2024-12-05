@@ -9,7 +9,7 @@ import { useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 
 
-export const ImportProgress = observer(({ fileName }: { fileName: string }) => {
+export const ImportProgress = observer(({ filePath }: { filePath: string }) => {
   const { t } = useTranslation()
   const blinko = RootStore.Get(BlinkoStore)
   const store = RootStore.Local(() => ({
@@ -18,7 +18,8 @@ export const ImportProgress = observer(({ fileName }: { fileName: string }) => {
     message: [] as ProgressResult[],
     status: '',
     get value() {
-      return Math.round((store.progress / store.total) * 100)
+      const v = Math.round((store.progress / store.total) * 100)
+      return isNaN(v) ? 0 : v
     },
     get isSuccess() {
       return store.status === 'success'
@@ -27,7 +28,7 @@ export const ImportProgress = observer(({ fileName }: { fileName: string }) => {
       return store.status === 'error'
     },
     handleAsyncGenerator: async () => {
-      const asyncGeneratorRes = await streamApi.task.importFromMemos.mutate({ fileName })
+      const asyncGeneratorRes = await streamApi.task.importFromMemos.mutate({ filePath })
       for await (const item of asyncGeneratorRes) {
         console.log(item)
         store.progress = item.progress?.current ?? 0
@@ -69,10 +70,10 @@ export const ImportProgress = observer(({ fileName }: { fileName: string }) => {
   </div>
 })
 
-export const ShowMemosProgressDialog = async (fileName: string) => {
+export const ShowMemosProgressDialog = async (filePath: string) => {
   RootStore.Get(DialogStore).setData({
     title: 'Import Progress',
-    content: <ImportProgress fileName={fileName} />,
+    content: <ImportProgress filePath={filePath} />,
     isOpen: true,
     size: 'lg',
   })

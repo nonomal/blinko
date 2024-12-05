@@ -24,6 +24,7 @@ type filterType = {
 export class BlinkoStore implements Store {
   sid = 'BlinkoStore';
   noteContent = '';
+  isCreateMode: boolean = true
   curSelectedNote: Note | null = null;
   curMultiSelectIds: number[] = [];
   isMultiSelectMode: boolean = false;
@@ -40,7 +41,8 @@ export class BlinkoStore implements Store {
     searchText: "",
     withoutTag: false,
     withFile: false,
-    withLink: false
+    withLink: false,
+    isUseAiQuery: false
   }
   noteTypeDefault: NoteType = NoteType.BLINKO
   currentCommonFilter: filterType | null = null
@@ -53,8 +55,13 @@ export class BlinkoStore implements Store {
         type = this.noteTypeDefault
       }
       const res = await api.notes.upsert.mutate({ content, type, isArchived, id, attachments, isTop, isShare })
-      if (res?.id) {
-        api.ai.embeddingUpsert.mutate({ id: res!.id, content: res!.content, type: id ? 'update' : 'insert' }, { context: { skipBatch: true } })
+      if (this.config.value?.isUseAI) {
+        if (res?.id) {
+          api.ai.embeddingUpsert.mutate({ id: res!.id, content: res!.content, type: id ? 'update' : 'insert' }, { context: { skipBatch: true } })
+        }
+        for (const attachment of attachments) {
+          api.ai.embeddingInsertAttachments.mutate({ id: res!.id, filePath: attachment.path }, { context: { skipBatch: true } })
+        }
       }
       eventBus.emit('editor:clear')
       showToast && RootStore.Get(ToastPlugin).success(id ? i18n.t("update-successfully") : i18n.t("create-successfully"))
@@ -108,15 +115,8 @@ export class BlinkoStore implements Store {
     }
   })
 
-  public = new PromiseState({
-    function: async () => {
-      const version = await api.public.version.query()
-      return { version }
-    }
-  })
-
   get showAi() {
-    return this.config.value?.isUseAI && this.config.value?.aiApiKey
+    return this.config.value?.isUseAI
   }
 
   config = new PromiseState({
@@ -187,7 +187,6 @@ export class BlinkoStore implements Store {
     this.tagList.call()
     this.config.call()
     this.dailyReviewNoteList.call()
-    this.public.call()
     this.task.call()
   }
 
@@ -210,7 +209,7 @@ export class BlinkoStore implements Store {
   }
 
   useQuery(router) {
-    const { tagId, withoutTag, withFile, withLink } = router.query;
+    const { tagId, withoutTag, withFile, withLink, searchText } = router.query;
     useEffect(() => {
       if (!router.isReady) return
       this.noteListFilterConfig.type = NoteType.BLINKO
@@ -220,6 +219,7 @@ export class BlinkoStore implements Store {
       this.noteListFilterConfig.withoutTag = false
       this.noteListFilterConfig.withLink = false
       this.noteListFilterConfig.withFile = false
+      this.noteListFilterConfig.searchText = searchText ?? ''
 
       if (router.pathname == '/notes') {
         this.noteListFilterConfig.type = NoteType.NOTE
@@ -237,6 +237,7 @@ export class BlinkoStore implements Store {
       if (withFile) {
         this.noteListFilterConfig.withFile = true
       }
+
       if (router.pathname == '/all') {
         this.noteListFilterConfig.type = -1
       }

@@ -12,19 +12,31 @@ import { DialogStore } from "@/store/module/Dialog";
 import { BlinkoEditor } from "../BlinkoEditor";
 import { useEffect, useState } from "react";
 import { NoteType } from "@/server/types";
+import { useRouter } from "next/router";
+import { AiStore } from "@/store/aiStore";
 
-export const ShowEditBlinkoModel = () => {
+export const ShowEditBlinkoModel = (size: string = '2xl', mode: 'create' | 'edit' = 'edit') => {
+  const blinko = RootStore.Get(BlinkoStore)
   RootStore.Get(DialogStore).setData({
-    size: '2xl',
+    size: size as any,
     isOpen: true,
     onlyContent: true,
     isDismissable: false,
-    content: <BlinkoEditor mode='edit' key='create-key' onSended={() => RootStore.Get(DialogStore).close()} />
+    content: <BlinkoEditor showCloseButton mode={mode} key='edit-key' onSended={() => {
+      RootStore.Get(DialogStore).close()
+      blinko.isCreateMode = false
+    }} />
   })
 }
 export const EditItem = observer(() => {
   const { t } = useTranslation();
-  return <div className="flex items-start gap-2" onClick={e => ShowEditBlinkoModel()}>
+  const blinko = RootStore.Get(BlinkoStore)
+  const [isDetailPage, setIsDetailPage] = useState(false)
+  const router = useRouter()
+  useEffect(() => {
+    setIsDetailPage(router.pathname.includes('/detail'))
+  }, [router.pathname])
+  return <div className="flex items-start gap-2" onClick={e => ShowEditBlinkoModel(isDetailPage ? '5xl' : '3xl')}>
     <Icon icon="tabler:edit" width="20" height="20" />
     <div>{t('edit')}</div>
   </div>
@@ -99,6 +111,19 @@ export const ArchivedItem = observer(() => {
   </div>
 })
 
+export const AITagItem = observer(() => {
+  const { t } = useTranslation();
+  const blinko = RootStore.Get(BlinkoStore)
+  const aiStore = RootStore.Get(AiStore)
+  return (
+    <div className="flex items-start gap-2" onClick={e => {
+      aiStore.autoTag.call(blinko.curSelectedNote?.id!, blinko.curSelectedNote?.content!)
+    }}>
+      <Icon icon="carbon:ai-status" width="20" height="20" />
+      <div>{t('ai-tag')}</div>
+    </div>
+  );
+});
 
 export const DeleteItem = observer(() => {
   const { t } = useTranslation();
@@ -113,17 +138,22 @@ export const DeleteItem = observer(() => {
 })
 
 export const BlinkoRightClickMenu = observer(() => {
-  const { t } = useTranslation();
+  const [isDetailPage, setIsDetailPage] = useState(false)
+  const router = useRouter()
   const blinko = RootStore.Get(BlinkoStore)
+
+  useEffect(() => {
+    setIsDetailPage(router.pathname.includes('/detail'))
+  }, [router.pathname])
 
   return <ContextMenu className='font-bold' id="blink-item-context-menu" hideOnLeave={false} animation="zoom">
     <ContextMenuItem >
       <EditItem />
     </ContextMenuItem>
 
-    <ContextMenuItem >
+    {!isDetailPage ? <ContextMenuItem >
       <MutiSelectItem />
-    </ContextMenuItem>
+    </ContextMenuItem> : <></>}
 
     <ContextMenuItem >
       <ConvertItem />
@@ -141,6 +171,11 @@ export const BlinkoRightClickMenu = observer(() => {
       <ArchivedItem />
     </ContextMenuItem>
 
+    {blinko.config.value?.isUseAI ? (
+      <ContextMenuItem>
+        <AITagItem />
+      </ContextMenuItem>
+    ) : <></>}
 
     <ContextMenuItem className='select-none divider hover:!bg-none'>
       <Divider orientation="horizontal" />
@@ -153,25 +188,33 @@ export const BlinkoRightClickMenu = observer(() => {
 })
 
 export const LeftCickMenu = observer(({ onTrigger, className }: { onTrigger: () => void, className: string }) => {
+  const [isDetailPage, setIsDetailPage] = useState(false)
+  const router = useRouter()
+  const blinko = RootStore.Get(BlinkoStore)
+
+  useEffect(() => {
+    setIsDetailPage(router.pathname.includes('/detail'))
+  }, [router.pathname])
+
   return <Dropdown onOpenChange={e => onTrigger()}>
     <DropdownTrigger >
       <Icon onClick={onTrigger} className={`${className} text-desc hover:text-primary cursor-pointer hover:scale-1.3 transition-all`} icon="fluent:more-vertical-16-regular" width="16" height="16" />
     </DropdownTrigger>
     <DropdownMenu aria-label="Static Actions">
       <DropdownItem key="EditItem"><EditItem /></DropdownItem>
-
-      <DropdownItem key="MutiSelectItem"><MutiSelectItem /></DropdownItem>
-
+      {!isDetailPage ? <DropdownItem key="MutiSelectItem"><MutiSelectItem /></DropdownItem> : <></>}
       <DropdownItem key="ConvertItem"> <ConvertItem /></DropdownItem>
-
       <DropdownItem key="TopItem" > <TopItem />  </DropdownItem>
-
       <DropdownItem key="ShareItem" > <PublicItem />  </DropdownItem>
-
-
       <DropdownItem key="ArchivedItem" >
         <ArchivedItem />
       </DropdownItem>
+
+      {blinko.config.value?.isUseAI ? (
+        <DropdownItem key="AITagItem">
+          <AITagItem />
+        </DropdownItem>
+      ) : <></>}
 
       <DropdownItem key="DeleteItem" className="text-danger" >
         <DeleteItem />

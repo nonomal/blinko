@@ -34,6 +34,7 @@ export const attachmentsSchema = z.object({
   noteId: z.number().int(),
   createdAt: z.coerce.date(),
   updatedAt: z.coerce.date(),
+  type: z.string(),
 })
 
 export type attachments = z.infer<typeof attachmentsSchema>

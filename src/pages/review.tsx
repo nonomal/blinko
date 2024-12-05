@@ -2,7 +2,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Swiper, SwiperSlide, } from "swiper/react";
 import "swiper/css";
 import "swiper/css/effect-cards";
-import { EffectCards } from 'swiper/modules';
+import { EffectCards, Virtual } from 'swiper/modules';
+import 'swiper/css/virtual';
 import '../styles/swiper-cards.css'
 import { observer } from 'mobx-react-lite';
 import { RootStore } from '@/store';
@@ -59,22 +60,27 @@ const App = observer(() => {
               swiperRef.current = swiper;
             }}
             onSlideChange={(swiper) => store.handleSlideChange(swiper)}
-            onReachEnd={e => { }}
             effect={"cards"}
             grabCursor={true}
-            modules={[EffectCards]}
+            modules={[EffectCards, Virtual]}
             className="mt-10 md:mt-4 w-[300px] h-[380px] md:w-[350px] md:h-[520px]"
             allowSlideNext={true}
             allowSlidePrev={true}
             touchRatio={1}
             resistance={true}
             resistanceRatio={0.5}
-            slidesPerView={1}
             centeredSlides={true}
+            virtual={{
+              enabled: true,
+              slides: blinko.dailyReviewNoteList.value ?? [],
+              cache: true,
+              addSlidesBefore: 1,
+              addSlidesAfter: 1,
+            }}
           >
             {
               blinko.dailyReviewNoteList.value?.map((i, index) => (
-                <SwiperSlide key={i.id} data-id={i.id} className='bg-background shadow-lg p-4 w-full overflow-hidden h-full'>
+                <SwiperSlide key={i.id} virtualIndex={index} data-id={i.id} className='bg-background shadow-lg p-4 w-full overflow-hidden h-full'>
                   <div className='bg-background p-0 w-full overflow-y-scroll h-full'>
                     <div className='flex items-center gap-2 mb-2'>
                       <div className='text-xs text-desc'>{dayjs(i.createdAt).fromNow()}</div>

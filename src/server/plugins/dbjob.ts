@@ -62,7 +62,7 @@ export class DBJob {
       zip.addLocalFolder(ROOT_PATH);
       zip.writeZip(targetFile);
 
-      return { apiPath: `/api/file/blinko_export.bko`, filePath: targetFile };
+      return { filePath: `/api/file/blinko_export.bko` };
     } catch (error) {
       throw new Error(error)
     }
@@ -70,7 +70,7 @@ export class DBJob {
 
   static async *RestoreDB(filePath: string): AsyncGenerator<RestoreResult & { progress: { current: number; total: number } }, void, unknown> {
     try {
-      const zip = new AdmZip(UPLOAD_FILE_PATH + '/' + filePath);
+      const zip = new AdmZip(filePath);
       zip.extractAllTo(ROOT_PATH, true);
 
       const backupData = JSON.parse(
@@ -85,18 +85,18 @@ export class DBJob {
       for (const note of backupData.notes) {
         current++;
         try {
-          const existingNote = await prisma.notes.findFirst({
-            where: { content: note.content }
-          });
+          // const existingNote = await prisma.notes.findFirst({
+          //   where: { content: note.content }
+          // });
 
-          if (existingNote) {
-            yield {
-              type: 'skip',
-              content: note.content.slice(0, 30),
-              progress: { current, total }
-            };
-            continue;
-          }
+          // if (existingNote) {
+          //   yield {
+          //     type: 'skip',
+          //     content: note.content.slice(0, 30),
+          //     progress: { current, total }
+          //   };
+          //   continue;
+          // }
 
           const createdNote = await adminCaller.notes.upsert({
             content: note.content,
@@ -146,14 +146,14 @@ export class DBJob {
                   where: { name: attachment.name }
                 });
 
-                if (existingAttachment) {
-                  yield {
-                    type: 'skip',
-                    content: attachment.name,
-                    progress: { current, total }
-                  };
-                  continue;
-                }
+                // if (existingAttachment) {
+                //   yield {
+                //     type: 'skip',
+                //     content: attachment.name,
+                //     progress: { current, total }
+                //   };
+                //   continue;
+                // }
 
                 await prisma.attachments.create({
                   data: {

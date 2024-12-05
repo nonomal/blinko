@@ -3,6 +3,7 @@ import sqlite3 from 'sqlite3';
 import { prisma } from '../prisma';
 import { adminCaller } from '../routers/_app';
 import fs from 'fs/promises'
+import { FileService } from './utils';
 type Memo = {
   id: string,
   created_ts: number,
@@ -14,14 +15,18 @@ export type ProgressResult = {
   content?: string;
   error?: unknown;
 }
+
+
 export class Memos {
   private db: sqlite3.Database
-  initDB(filePath: string) {
-    this.db = new sqlite3.Database(UPLOAD_FILE_PATH + '/' + filePath, (err) => {
+  async initDB(filePath: string) {
+    const dbPath = await FileService.getFile(filePath);
+    this.db = new sqlite3.Database(dbPath, (err) => {
       if (err) {
         console.error('can not connect to memos db', err.message);
       }
     });
+    return dbPath;
   }
   closeDB() {
     this.db.close()
@@ -127,13 +132,25 @@ export class Memos {
           continue;
         }
 
-        const fileName = row?.filename;
+        const fileName = row?.filename ?? '';
         const filePath = UPLOAD_FILE_PATH + '/' + fileName;
-        await fs.writeFile(filePath, row!.blob);
+        let newFileName = fileName.split('/').pop() || '';
+        const hasSameFile = await fs.access(filePath).then(() => true).catch(() => false);
+        if (row?.blob) {
+          if (hasSameFile) {
+            const extension = fileName.split('.').pop() || '';
+            const originalName = fileName.split('.').slice(0, -1).join('.');
+            newFileName = `${originalName}_${Date.now()}.${extension}`;
+            await fs.writeFile(UPLOAD_FILE_PATH + '/' + newFileName, row!.blob);
+          } else {
+            await fs.writeFile(filePath, row!.blob);
+          }
+        }
+
         await prisma.attachments.create({
           data: {
             name: row?.filename,
-            path: '/api/file/' + fileName,
+            path: '/api/file/' + newFileName,
             size: row?.size,
             noteId: node.id,
           }

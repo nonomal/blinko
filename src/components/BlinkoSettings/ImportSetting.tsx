@@ -30,7 +30,7 @@ export const ImportSetting = observer(() => {
             return RootStore.Get(ToastPlugin).error(t('not-a-bko-file'))
           }
           // PromiseCall(api.task.restoreDB.query({ fileName }))
-          ShowBlinkoProgressDialog(fileName)
+          ShowBlinkoProgressDialog(filePath)
         }}>
         </UploadFileWrapper>
       </>} />
@@ -41,12 +41,12 @@ export const ImportSetting = observer(() => {
         <div>{t('import-from-memos-memos_prod-db')}</div>
         <div className="text-desc text-xs">{t('when-exporting-memos_prod-db-please-close-the-memos-container-to-avoid-partial-loss-of-data')}</div>
       </div>}
-      rightContent={<div>
+      rightContent={<div className="flex w-full ml-auto justify-end">
         <UploadFileWrapper onUpload={async ({ filePath, fileName }) => {
           if (!fileName.endsWith('.db')) {
             return RootStore.Get(ToastPlugin).error('Not a Memos database file')
           }
-          ShowMemosProgressDialog(fileName)
+          ShowMemosProgressDialog(filePath)
         }}>
         </UploadFileWrapper>
       </div>} />

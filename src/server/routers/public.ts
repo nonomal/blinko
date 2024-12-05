@@ -15,6 +15,15 @@ export const publicRouter = router({
     .output(z.string())
     .query(async function () {
       return await cache.wrap('version', async () => {
+        return packageJson.version
+      }, { ttl: 60 * 60 * 1000 })
+    }),
+  latestVersion: publicProcedure
+    .meta({ openapi: { method: 'GET', path: '/v1/public/latest-version', summary: 'Get a new version', tags: ['Public'] } })
+    .input(z.void())
+    .output(z.string())
+    .query(async function () {
+      return await cache.wrap('latest-version', async () => {
         const url = `https://api.github.com/repos/blinko-space/blinko/releases/latest`;
         try {
           const res = await axios.get(url, {
@@ -24,17 +33,11 @@ export const publicRouter = router({
             },
           })
           const latestVersion = res.data.tag_name.replace('v', '');
-          const currentVersion = packageJson.version;
-          if (latestVersion !== currentVersion) {
-            return latestVersion
-          } else {
-            return ''
-          }
+          return latestVersion
         } catch (error) {
-          // console.error(error)
           return ''
         }
-      }, { ttl: 60 * 60 * 1000 })
+      }, { ttl: 60 * 10 * 1000 })
     }),
   linkPreview: publicProcedure
     .meta({ openapi: { method: 'GET', path: '/v1/public/link-preview', summary: 'Get a link preview info', tags: ['Public'] } })
@@ -48,7 +51,7 @@ export const publicRouter = router({
       return cache.wrap(input.url, async () => {
         try {
           const timeoutPromise = new Promise((_, reject) => {
-            setTimeout(() => reject(new Error('Timeout')), 3000);
+            setTimeout(() => reject(new Error('Timeout')), 5000);
           });
           const fetchPromise = limit(async () => {
             const result: Metadata = await unfurl(input.url);

@@ -14,6 +14,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
+
       - name: Setup Node.js
         uses: actions/setup-node@v3
         with:
@@ -27,5 +28,5 @@ jobs:
 
       - name: Run Semantic Release
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN  }}
+          GITHUB_TOKEN: ${{ secrets.GH_SEMANTIC_TOKEN  }}
         run: pnpm exec semantic-release

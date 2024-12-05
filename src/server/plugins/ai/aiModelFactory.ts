@@ -1,10 +1,11 @@
 import { cache } from "@/lib/cache"
-import { MarkdownTextSplitter } from "@langchain/textsplitters"
+import { MarkdownTextSplitter, TokenTextSplitter } from "@langchain/textsplitters"
 import { FaissStore } from "@langchain/community/vectorstores/faiss"
 import { BaseChatModel } from "@langchain/core/language_models/chat_models"
 import { Embeddings } from "@langchain/core/embeddings"
 import { OpenAIModelProvider } from "./openAIModelProvider"
 import { getGlobalConfig } from "@/server/routers/config"
+import { OllamaModelProvider } from "./ollamaModelProvider"
 
 export class AiModelFactory {
   static async globalConfig() {
@@ -12,9 +13,10 @@ export class AiModelFactory {
       return await getGlobalConfig()
     }, { ttl: 1000 })
   }
+
   static async ValidConfig() {
     const globalConfig = await AiModelFactory.globalConfig()
-    if (!globalConfig.aiModelProvider || !globalConfig.aiApiKey || !globalConfig.isUseAI) {
+    if (!globalConfig.aiModelProvider || !globalConfig.isUseAI) {
       throw new Error('model provider or apikey not configure!')
     }
     return await AiModelFactory.globalConfig()
@@ -28,15 +30,22 @@ export class AiModelFactory {
         LLM: provider.LLM(),
         VectorStore: await provider.VectorStore(),
         Embeddings: provider.Embeddings(),
-        Splitter: provider.Splitter()
+        MarkdownSplitter: provider.MarkdownSplitter(),
+        TokenTextSplitter: provider.TokenTextSplitter()
       }
     }
-    return {
-      LLM: null as unknown as BaseChatModel,
-      VectorStore: null as unknown as FaissStore,
-      Embeddings: null as unknown as Embeddings,
-      Splitter: null as unknown as MarkdownTextSplitter
+    
+    if (globalConfig.aiModelProvider == 'Ollama') {
+      const provider = new OllamaModelProvider({ globalConfig })
+      return {
+        LLM: provider.LLM(),
+        VectorStore: await provider.VectorStore(),
+        Embeddings: provider.Embeddings(),
+        MarkdownSplitter: provider.MarkdownSplitter(),
+        TokenTextSplitter: provider.TokenTextSplitter()
+      }
     }
+    throw new Error('not support other loader')
   }
 
   static async GetAudioLoader(audioPath: string) {
@@ -44,7 +53,7 @@ export class AiModelFactory {
     if (globalConfig.aiModelProvider == 'OpenAI') {
       const provider = new OpenAIModelProvider({ globalConfig })
       return provider.AudioLoader(audioPath)
-    }else{
+    } else {
       throw new Error('not support other loader')
     }
   }

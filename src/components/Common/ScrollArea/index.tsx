@@ -67,7 +67,7 @@ export const ScrollArea = observer(forwardRef<ScrollAreaHandles, IProps>(({ styl
     <motion.div
       ref={scrollRef}
       style={style}
-      className={`${className} overflow-y-scroll`}
+      className={`${className} overflow-y-scroll overflow-x-hidden`}
       animate={controls}
     >
       {children}

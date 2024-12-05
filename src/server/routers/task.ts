@@ -7,6 +7,8 @@ import { ARCHIVE_BLINKO_TASK_NAME, DBBAK_TASK_NAME, UPLOAD_FILE_PATH } from '@/l
 import { scheduledTaskSchema } from '@/lib/prismaZodType';
 import { Memos } from '../plugins/memos';
 import { unlink } from 'fs/promises';
+import { FileService } from '../plugins/utils';
+
 
 export const taskRouter = router({
   list: authProcedure
@@ -38,39 +40,47 @@ export const taskRouter = router({
     }),
   importFromBlinko: authProcedure.use(demoAuthMiddleware)
     .input(z.object({
-      fileName: z.string()
+      filePath: z.string()
     }))
     .mutation(async function* ({ input }) {
-      const { fileName } = input
+      const { filePath } = input
       try {
-        const res = DBJob.RestoreDB(fileName)
+        const localFilePath = await FileService.getFile(filePath)
+        const res = DBJob.RestoreDB(localFilePath)
         for await (const result of res) {
           yield result;
         }
-        await unlink(UPLOAD_FILE_PATH + '/' + fileName)
+        try {
+          await unlink(localFilePath)
+          await FileService.deleteFile(filePath)
+        } catch (error) {
+        }
       } catch (error) {
-        await unlink(UPLOAD_FILE_PATH + '/' + fileName)
         throw new Error(error)
       }
     }),
 
   importFromMemos: authProcedure.use(demoAuthMiddleware)
     .input(z.object({
-      fileName: z.string() //xxxx.db
+      filePath: z.string() //xxxx.db
     }))
     .mutation(async function* ({ input }) {
       try {
         const memos = new Memos();
-        memos.initDB(input.fileName);
+        const dbPath = await memos.initDB(input.filePath);
         for await (const result of memos.importMemosDB()) {
           yield result;
         }
-
         for await (const result of memos.importFiles()) {
           yield result;
         }
         memos.closeDB();
-        await unlink(UPLOAD_FILE_PATH + '/' + input.fileName)
+        console.log({ dbPath })
+        try {
+          await unlink(dbPath)
+          await FileService.deleteFile(input.filePath)
+        } catch (error) {
+        }
       } catch (error) {
         throw new Error(error)
       }

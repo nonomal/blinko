@@ -3,32 +3,37 @@ import Editor from "../Common/Editor"
 import { RootStore } from "@/store"
 import { BlinkoStore } from "@/store/blinkoStore"
 import dayjs from "@/lib/dayjs"
-import { useRef } from "react"
+import { useEffect, useRef } from "react"
 import { NoteType } from "@/server/types"
 import { useRouter } from "next/router"
 
 type IProps = {
   mode: 'create' | 'edit',
   onSended?: () => void,
-  onHeightChange?: (height: number) => void
+  onHeightChange?: (height: number) => void,
+  showCloseButton?: boolean
 }
-export const BlinkoEditor = observer(({ mode, onSended, onHeightChange }: IProps) => {
+export const BlinkoEditor = observer(({ mode, onSended, onHeightChange, showCloseButton }: IProps) => {
   const isCreateMode = mode == 'create'
   const blinko = RootStore.Get(BlinkoStore)
   const editorRef = useRef<any>(null)
   const router = useRouter()
-  return <div ref={editorRef} id='global-editor' >
+  useEffect(() => {
+    blinko.isCreateMode = mode == 'create'
+  }, [mode])
+  return <div className="max-h-[100vh]" ref={editorRef} id='global-editor' onClick={() => {
+    blinko.isCreateMode = mode == 'create'
+  }}>
     <Editor
       mode={mode}
       originFiles={!isCreateMode ? blinko.curSelectedNote?.attachments : []}
       content={isCreateMode ? blinko.noteContent! : blinko.curSelectedNote?.content!}
       onChange={v => {
-        if (v == '') {
-          onHeightChange?.(editorRef.current?.clientHeight < 90 ? editorRef.current?.clientHeight : 90)
-        } else {
-          onHeightChange?.(editorRef.current?.clientHeight ?? 90)
-        }
         isCreateMode ? (blinko.noteContent = v) : (blinko.curSelectedNote!.content = v)
+      }}
+      showCloseButton={showCloseButton}
+      onHeightChange={() => {
+        onHeightChange?.(editorRef.current?.clientHeight ?? 75)
       }}
       isSendLoading={blinko.upsertNote.loading.value}
       bottomSlot={
@@ -38,7 +43,7 @@ export const BlinkoEditor = observer(({ mode, onSended, onHeightChange }: IProps
       onSend={async ({ files }) => {
         if (isCreateMode) {
           //@ts-ignore
-          await blinko.upsertNote.call({ refresh: false, content: blinko.noteContent, attachments: files.map(i => { return { name: i.name, path: i.uploadPath, size: i.size } }) })
+          await blinko.upsertNote.call({ refresh: false, content: blinko.noteContent, attachments: files.map(i => { return { name: i.name, path: i.uploadPath, size: i.size, type: i.type } }) })
           if (blinko.noteTypeDefault == NoteType.NOTE && router.pathname != '/notes') {
             await router.push('/notes')
             blinko.forceQuery++
@@ -55,7 +60,7 @@ export const BlinkoEditor = observer(({ mode, onSended, onHeightChange }: IProps
             //@ts-ignore
             content: blinko.curSelectedNote.content,
             //@ts-ignore
-            attachments: files.map(i => { return { name: i.name, path: i.uploadPath, size: i.size } })
+            attachments: files.map(i => { return { name: i.name, path: i.uploadPath, size: i.size, type: i.type } })
           })
         }
         onSended?.()

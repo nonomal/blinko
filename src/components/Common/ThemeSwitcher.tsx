@@ -4,7 +4,11 @@ import { observer } from 'mobx-react-lite';
 import { Button } from '@nextui-org/react';
 import { Icon } from '@iconify/react';
 
-const ThemeSwitcher = observer(() => {
+interface ThemeSwitcherProps {
+  onChange?: (theme: string) => Promise<any>;
+}
+
+const ThemeSwitcher = observer(({ onChange }: ThemeSwitcherProps) => {
   const [isMounted, setIsMounted] = useState(false);
   const { theme, setTheme } = useTheme();
 
@@ -20,11 +24,13 @@ const ThemeSwitcher = observer(() => {
       isIconOnly
       type="button"
       className="py-2 transition duration-300 ease-in-out cursor-pointer"
-      onClick={() => {
-        setTheme(theme === 'light' ? 'dark' : 'light');
+      onClick={async () => {
+        const newTheme = theme === 'light' ? 'dark' : 'light';
+        await onChange?.(newTheme);
+        setTheme(newTheme);
       }}
     >
-      {isMounted && theme === 'dark' ? <Icon icon="line-md:sun-rising-loop" width="24" height="24" /> :<Icon icon="line-md:moon-alt-loop" width="24" height="24" />}
+      {isMounted && theme === 'dark' ? <Icon icon="line-md:sun-rising-loop" width="24" height="24" /> : <Icon icon="line-md:moon-alt-loop" width="24" height="24" />}
     </Button>
   );
 });

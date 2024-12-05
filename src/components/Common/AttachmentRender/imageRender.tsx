@@ -6,6 +6,7 @@ import { Icon } from '@iconify/react';
 import { DeleteIcon, DownloadIcon } from './icons';
 import { observer } from 'mobx-react-lite';
 import { RootStore } from '@/store';
+import { useMediaQuery } from 'usehooks-ts';
 
 type IProps = {
   files: FileType[]
@@ -30,19 +31,23 @@ const ImageThumbnailRender = ({ file, className }: { file: FileType, className?:
       }
       setCurrentSrc(file.preview)
     }}
-    style={{ borderRadius: '13px' }}
+    // style={{ borderRadius: '13px' }}
     className={className}
   />
 }
 
 const ImageRender = observer((props: IProps) => {
   const { files, preview = false, columns = 3 } = props
+  const isPc = useMediaQuery('(min-width: 768px)')
   const images = files?.filter(i => i.previewType == 'image')
 
   const imageRenderClassName = useMemo(() => {
     const imageLength = files?.filter(i => i.previewType == 'image')?.length
+    if (!preview && !isPc) {
+      return `flex items-center overflow-x-scroll gap-2`
+    }
     if (imageLength == 1) {
-      return `flex`
+      return `grid grid-cols-2 gap-2`
     }
     if (imageLength > 1 && imageLength <= 5) {
       return `grid grid-cols-2 gap-2`
@@ -55,8 +60,11 @@ const ImageRender = observer((props: IProps) => {
 
   const imageHeight = useMemo(() => {
     const imageLength = files?.filter(i => i.previewType == 'image')?.length
+    if (!preview&& !isPc) {
+      return `h-[80px] w-[80px] min-w-[80px]`
+    }
     if (imageLength == 1) {
-      return `h-auto max-h-[300px]`
+      return `h-[200px] max-h-[200px] md:max-w-[200px]`
     }
     if (imageLength > 1 && imageLength <= 5) {
       return `md:h-[180px] h-[160px]`
@@ -77,7 +85,7 @@ const ImageRender = observer((props: IProps) => {
           <div className='w-full'>
             <PhotoView src={file.preview}>
               <div>
-                <ImageThumbnailRender file={file} className={`rounded-xl mb-4 ${imageHeight} object-cover w-[1000px]`} />
+                <ImageThumbnailRender file={file} className={`mb-4 ${imageHeight} object-cover md:w-[1000px]`} />
               </div>
             </PhotoView>
           </div>

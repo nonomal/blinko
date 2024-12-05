@@ -1,111 +1,127 @@
 import { observer } from "mobx-react-lite";
 import { BlinkoStore } from '@/store/blinkoStore';
-import { Card, Tooltip } from '@nextui-org/react';
-import { _ } from '@/lib/lodash';
-import { useTranslation } from 'react-i18next';
+import { Card } from '@nextui-org/react';
 import { RootStore } from '@/store';
-import { motion } from "framer-motion"
 import { ContextMenuTrigger } from '@/components/Common/ContextMenu';
-import { MarkdownRender } from '@/components/Common/MarkdownRender';
-import { Icon } from '@iconify/react';
-import dayjs from '@/lib/dayjs';
-import { Note, NoteType } from '@/server/types';
-import { ConvertItemFunction, LeftCickMenu, ShowEditBlinkoModel } from "../BlinkoRightClickMenu";
+import { Note } from '@/server/types';
+import { ShowEditBlinkoModel } from "../BlinkoRightClickMenu";
 import { useMediaQuery } from "usehooks-ts";
-import { Copy } from "../Common/Copy";
-import { FilesAttachmentRender } from "../Common/AttachmentRender";
-import copy from "copy-to-clipboard";
-import { ToastPlugin } from "@/store/module/Toast/Toast";
+import { _ } from '@/lib/lodash';
+import { useState, useEffect } from "react";
+import { ExpandableContainer } from "./expandContainer";
+import { BlogContent } from "./blogContent";
+import { NoteContent } from "./noteContent";
+import { helper } from "@/lib/helper";
+import { CardHeader } from "./cardHeader";
+import { CardFooter } from "./cardFooter";
+import { useHistoryBack } from "@/lib/hooks";
+import { useRouter } from "next/router";
 
-export const BlinkoCard = observer(({ blinkoItem, isShareMode = false }: { blinkoItem: Note, isShareMode?: boolean }) => {
-  const { t } = useTranslation();
-  const isPc = useMediaQuery('(min-width: 768px)')
-  const blinko = RootStore.Get(BlinkoStore)
+interface BlinkoCardProps {
+  blinkoItem: Note & {
+    isBlog?: boolean;
+    blogCover?: string;
+    title?: string;
+  };
+  isShareMode?: boolean;
+  defaultExpanded?: boolean;
+}
 
-  return <motion.div key={blinkoItem.id} className='w-full' style={{ boxShadow: '0 0 15px -5px #5858581a' }}>
-    <ContextMenuTrigger id="blink-item-context-menu" >
-      <div
-        onContextMenu={() => {
-          blinko.curSelectedNote = _.cloneDeep(blinkoItem)
-        }}
-        onDoubleClick={() => {
-          blinko.curSelectedNote = _.cloneDeep(blinkoItem)
-          ShowEditBlinkoModel()
-        }}
-        onClick={() => {
-          if (blinko.isMultiSelectMode) {
-            blinko.onMultiSelectNote(blinkoItem.id!)
-          }
-        }}>
-        <Card onContextMenu={e => !isPc && e.stopPropagation()} shadow='none'
-          className={`group/card ${isPc ? 'hover:translate-y-1' : ''} flex flex-col p-4 bg-background transition-all ${blinko.curMultiSelectIds?.includes(blinkoItem.id!) ? 'border-2 border-primary' : ''}`}>
-          <div className="flex items-center select-none ">
-            <div className="mb-2 flex items-center w-full gap-1">
-              {
-                blinkoItem.isShare && !isShareMode &&
-                <Tooltip content={t('go-to-share-page')}>
-                  <Icon className="cursor-pointer text-[#8600EF]" icon="prime:eye" width="16" height="16" onClick={() => {
-                    window.open(`/share`)
-                  }} />
-                </Tooltip>
-              }
-              <div className='text-xs text-desc'>{
-                blinko.config.value?.timeFormat == 'relative' ?
-                  dayjs(blinko.config.value?.isOrderByCreateTime ? blinkoItem.createdAt : blinkoItem.updatedAt).fromNow() :
-                  dayjs(blinko.config.value?.isOrderByCreateTime ? blinkoItem.createdAt : blinkoItem.updatedAt).format(blinko.config.value?.timeFormat ?? 'YYYY-MM-DD HH:mm:ss')
-              }</div>
-              <Copy size={16} className="ml-auto opacity-0 group-hover/card:opacity-100  group-hover/card:translate-x-0 translate-x-1 " content={blinkoItem.content + `\n${blinkoItem.attachments?.map(i => window.location.origin + i.path).join('\n')}`} />
-              <Tooltip content={blinkoItem.isShare ? 'Copy share link' : 'Share and copy link'}>
-                <Icon icon="tabler:share-2" width="16" height="16" className="cursor-pointer text-desc ml-2 opacity-0 group-hover/card:opacity-100  group-hover/card:translate-x-0 translate-x-1 "
-                  onClick={async () => {
-                    if (!blinkoItem.isShare) {
-                      await blinko.upsertNote.call({ id: blinkoItem.id, isShare: true, showToast: false })
-                    }
-                    copy(`${window.location.origin}/share/${blinkoItem.id}`)
-                    RootStore.Get(ToastPlugin).success('Copied successfully~ Go to share!')
-                  }} />
-              </Tooltip>
-              {blinkoItem.isTop && <Icon className="ml-auto group-hover/card:ml-2 text-[#EFC646]" icon="solar:bookmark-bold" width="16" height="16" />}
-              {
-                !isShareMode && <LeftCickMenu className={blinkoItem.isTop ? "ml-[10px]" : 'ml-auto group-hover/card:ml-2'} onTrigger={() => { blinko.curSelectedNote = _.cloneDeep(blinkoItem) }} />
-              }
+export const BlinkoCard = observer(({ blinkoItem, isShareMode = false }: BlinkoCardProps) => {
+  const isPc = useMediaQuery('(min-width: 768px)');
+  const blinko = RootStore.Get(BlinkoStore);
+  const [isExpanded, setIsExpanded] = useState(false);
+  const { query, pathname } = useRouter();
+
+  useHistoryBack({
+    state: isExpanded,
+    onStateChange: () => setIsExpanded(false),
+    historyState: 'expanded'
+  });
+
+  blinkoItem.isBlog = ((blinkoItem.content?.length ?? 0) > (blinko.config.value?.textFoldLength ?? 1000)) && !pathname.includes('/share');
+  blinkoItem.title = blinkoItem.content?.split('\n').find(line => {
+    if (!line.trim()) return false;
+    if (helper.regex.isContainHashTag.test(line)) return false;
+    return true;
+  }) || '';
+  blinkoItem.blogCover = blinkoItem.attachments?.find(i =>
+    i.type.includes('image') || helper.getFileType(i.type, i.path) == 'image'
+  )?.path ?? '';
+
+  const handleExpand = () => {
+    if (blinkoItem.isBlog) {
+      setIsExpanded(true);
+    }
+  };
+
+  const handleClick = () => {
+    if (blinko.isMultiSelectMode) {
+      blinko.onMultiSelectNote(blinkoItem.id!);
+    } else {
+      handleExpand();
+    }
+  };
+
+  const handleContextMenu = () => {
+    blinko.curSelectedNote = _.cloneDeep(blinkoItem);
+  };
+
+  const handleDoubleClick = () => {
+    blinko.curSelectedNote = _.cloneDeep(blinkoItem);
+    ShowEditBlinkoModel();
+  };
+
+  return (
+    <ExpandableContainer isExpanded={isExpanded} key={blinkoItem.id}>
+      <ContextMenuTrigger id="blink-item-context-menu">
+        <div
+          onContextMenu={handleContextMenu}
+          onDoubleClick={handleDoubleClick}
+          onClick={handleClick}
+        >
+          <Card
+            onContextMenu={e => !isPc && e.stopPropagation()}
+            shadow='none'
+            className={`
+              flex flex-col p-4 bg-background transition-all group/card 
+              ${isExpanded ? 'h-screen overflow-y-scroll rounded-none' : ''} 
+              ${isPc && !isExpanded && !blinkoItem.isShare ? 'hover:translate-y-1' : ''} 
+              ${blinkoItem.isBlog ? 'cursor-pointer' : ''} 
+              ${blinko.curMultiSelectIds?.includes(blinkoItem.id!) ? 'border-2 border-primary' : ''}
+            `}
+          >
+            <div className={isExpanded ? 'max-w-[800px] mx-auto relative md:p-4 w-full' : 'w-full'}>
+              <CardHeader blinkoItem={blinkoItem} blinko={blinko} isShareMode={isShareMode} isExpanded={isExpanded} />
+
+              {blinkoItem.isBlog && !isExpanded && (
+                <BlogContent blinkoItem={blinkoItem} />
+              )}
+
+              {(!blinkoItem.isBlog || isExpanded) && <NoteContent blinkoItem={blinkoItem} blinko={blinko} isExpanded={isExpanded} />}
+
+              <CardFooter blinkoItem={blinkoItem} blinko={blinko} />
+
+              {isExpanded && (
+                <>
+                  <div className="halation absolute bottom-10 left-0 md:left-[50%] h-[400px] w-[400px] overflow-hidden blur-3xl z-[0] pointer-events-none">
+                    <div
+                      className="w-full h-[100%] bg-[#c45cff] opacity-5"
+                      style={{ clipPath: "circle(50% at 50% 50%)" }}
+                    />
+                  </div>
+                  <div className="halation absolute top-10 md:right-[50%] h-[400px] w-[400px] overflow-hidden blur-3xl z-[0] pointer-events-none">
+                    <div
+                      className="w-full h-[100%] bg-[#c45cff] opacity-5"
+                      style={{ clipPath: "circle(50% at 50% 50%)" }}
+                    />
+                  </div>
+                </>
+              )}
             </div>
-          </div>
-          <MarkdownRender content={blinkoItem.content} onChange={(newContent) => {
-            blinkoItem.content = newContent
-            blinko.upsertNote.call({ id: blinkoItem.id, content: newContent, refresh: false })
-          }} />
-          <div className={blinkoItem.attachments?.length != 0 ? 'my-2' : ''}>
-            <FilesAttachmentRender files={blinkoItem.attachments ?? []} preview />
-          </div>
-          <div className="flex items-center">
-            {
-              blinkoItem.type == NoteType.BLINKO ?
-                <Tooltip content={t('convert-to') + ' Note'} delay={1000} >
-                  <div className='flex items-center justify-start mt-2 cursor-pointer' onClick={() => {
-                    blinko.curSelectedNote = _.cloneDeep(blinkoItem)
-                    ConvertItemFunction()
-                  }}>
-                    <Icon className='text-yellow-500' icon="basil:lightning-solid" width="12" height="12" />
-                    <div className='text-desc text-xs font-bold ml-1 select-none'>{t('blinko')}</div>
-                  </div>
-                </Tooltip> :
-                <Tooltip content={t('convert-to') + ' Blinko'} delay={1000}>
-                  <div className='flex items-center justify-start mt-2 cursor-pointer' onClick={() => {
-                    blinko.curSelectedNote = _.cloneDeep(blinkoItem)
-                    ConvertItemFunction()
-                  }}>
-                    <Icon className='text-blue-500' icon="solar:notes-minimalistic-bold-duotone" width="12" height="12" />
-                    <div className='text-desc text-xs font-bold ml-1 select-none'>{t('note')}</div>
-                  </div>
-                </Tooltip>
-            }
-            {
-              (dayjs(blinkoItem.createdAt).fromNow() !== dayjs(blinkoItem.updatedAt).fromNow()) && <div className='ml-auto text-xs text-desc'>{t('created-in')} {dayjs(blinkoItem.createdAt).fromNow()}</div>
-            }
-          </div>
-        </Card>
-      </div>
-    </ContextMenuTrigger >
-  </motion.div >
-})
+          </Card>
+        </div>
+      </ContextMenuTrigger>
+    </ExpandableContainer>
+  );
+});

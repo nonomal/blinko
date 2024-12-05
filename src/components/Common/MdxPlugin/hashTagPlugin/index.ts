@@ -6,7 +6,7 @@ import {
   activeEditor$,
 } from "@mdxeditor/editor";
 import { TextNode } from "lexical";
-import { showTagSelectPop } from "../../TagSelectPop";
+import { showTagSelectPop } from "../../PopoverFloat/tagSelectPop";
 
 //@deprecated
 export const hashTagPlugin = realmPlugin({
@@ -28,7 +28,7 @@ export const hashTagPlugin = realmPlugin({
       const isEndsWithBank = endsWithBankRegex.test(currentText)
       const isEndsWithHashTag = helper.regex.isEndsWithHashTag.test(currentText)
       if (currentText == '' || !isEndsWithHashTag) {
-        setTimeout(() => eventBus.emit('hashpop:hidden'))
+        setTimeout(() => eventBus.emit('tagselect:hidden'))
         return
       }
       if (isEndsWithHashTag && currentText != '' && !isEndsWithBank) {

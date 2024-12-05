@@ -5,7 +5,7 @@ import { RootStore } from "@/store";
 import { BlinkoStore } from "@/store/blinkoStore";
 import { Icon } from "@iconify/react";
 import { SideBarItem } from "../Layout";
-import { Popover, PopoverTrigger, PopoverContent, Dropdown, DropdownTrigger, DropdownMenu, DropdownItem } from "@nextui-org/react";
+import { Popover, PopoverTrigger, PopoverContent, Dropdown, DropdownTrigger, DropdownMenu, DropdownItem, Input, Chip, Button } from "@nextui-org/react";
 import EmojiPicker, { EmojiStyle, Theme } from 'emoji-picker-react';
 import { useTheme } from "next-themes";
 import { useRouter } from "next/router";
@@ -17,29 +17,71 @@ import { BaseStore } from "@/store/baseStore";
 import { useTranslation } from "react-i18next";
 import { useMediaQuery } from "usehooks-ts";
 import { eventBus } from "@/lib/event";
+import { DialogStore } from "@/store/module/Dialog";
+import { AiStore } from "@/store/aiStore";
 
-const EmojiPick = ({ children, element }) => {
-  const { theme } = useTheme();
-  const [open, setOpen] = useState(false)
-  return <Popover placement="bottom" showArrow={true} isOpen={open} onOpenChange={setOpen}>
-    <PopoverTrigger>
-      <div className="hover:translate-x-1 transition-all rounded-md px-1" >
-        {children}
-      </div>
-    </PopoverTrigger>
-    <PopoverContent>
-      <EmojiPicker emojiStyle={EmojiStyle.NATIVE} theme={theme == 'dark' ? Theme.DARK : Theme.LIGHT} onEmojiClick={async e => {
-        await PromiseCall(api.tags.updateTagIcon.mutate({ id: element.id, icon: e.emoji }))
-        setOpen(false)
-      }} />
-    </PopoverContent>
-  </Popover>
+const Emoji = ({ icon }: { icon: string }) => {
+  return <>
+    {
+      icon ? <>
+        {
+          // @ts-ignore
+          icon?.includes(':') ?
+            // @ts-ignore
+            <Icon icon={icon} width="22" height="22" /> :
+            icon
+        }
+      </> : <Icon icon="mdi:hashtag" width="22" height="22" />
+    }
+  </>
 }
 
+const ShowEmojiPicker = (element, theme) => {
+  RootStore.Get(DialogStore).setData({
+    isOpen: true,
+    title: 'Emoji Picker',
+    content: <div className='w-full'>
+      <EmojiPicker width='100%' className='border-none' emojiStyle={EmojiStyle.NATIVE} theme={theme == 'dark' ? Theme.DARK : Theme.LIGHT} onEmojiClick={async e => {
+        await PromiseCall(api.tags.updateTagIcon.mutate({ id: element.id, icon: e.emoji }))
+        RootStore.Get(DialogStore).close()
+      }} />
+    </div>
+  })
+}
+
+const CustomIcon = observer(({ onSubmit }: { onSubmit: (icon: string) => void }) => {
+  const [icon, setIcon] = useState('')
+  return <div className='w-full flex flex-col gap-2'>
+    <Input
+      label='Custom Icon'
+      placeholder='Enter custom icon like "ri:star-smile-line"'
+      value={icon}
+      onValueChange={setIcon}
+      description={<>
+        Blinko use <a className="text-blue-500" href="https://icon-sets.iconify.design/" target="_blank">Iconify</a> for custom icon
+      </>}
+    />
+    <div className="flex justify-end">
+      <Button color="primary" onClick={() => { onSubmit(icon) }}>Submit</Button>
+    </div>
+  </div>
+})
+
+const ShowCustomIconPicker = (element, theme) => {
+  RootStore.Get(DialogStore).setData({
+    isOpen: true,
+    title: 'Custom Icon',
+    content: <CustomIcon onSubmit={async (icon) => {
+      await PromiseCall(api.tags.updateTagIcon.mutate({ id: element.id, icon }))
+      RootStore.Get(DialogStore).close()
+    }} />
+  })
+}
 
 export const TagListPanel = observer(() => {
   const blinko = RootStore.Get(BlinkoStore);
   const base = RootStore.Get(BaseStore);
+  const { theme } = useTheme();
   const isPc = useMediaQuery('(min-width: 768px)')
   const { t } = useTranslation()
   const router = useRouter()
@@ -51,19 +93,15 @@ export const TagListPanel = observer(() => {
     <>
       <div className="ml-2 my-2 text-xs font-bold text-[#a252e1]">{t('total-tags')}</div>
       <TreeView
+        className="mb-4"
         data={flattenTree({
           name: "",
           children: blinko.tagList.value?.listTags,
         })}
         aria-label="directory tree"
         togglableSelect
-        // selectedIds={[urpcStore.curSelectPath]}
         clickAction="EXCLUSIVE_SELECT"
         onNodeSelect={(e) => {
-          // urpcStore.onRenderFunctionAndVar(
-          //   e.element.metadata._path,
-          //   e.element.metadata
-          // );
         }}
         multiSelect={false}
         nodeRenderer={({
@@ -83,30 +121,24 @@ export const TagListPanel = observer(() => {
               }}
             >
               {isBranch ? (
-                <EmojiPick element={element}>
-                  <div className="flex items-center justify-center h-[24px]">
-                    <div className="flex items-center justify-center group-hover:opacity-100 opacity-0 w-0 h-0 group-hover:w-[24px] group-hover:h-[24px] transition-all" >
-                      {isExpanded ?
-                        <Icon icon="gravity-ui:caret-down" className="hover:text-primary transition-all" width="20" height="20" />
-                        : <Icon icon="gravity-ui:caret-right" className="hover:text-primary transition-all" width="20" height="20" />
-                      }
-                    </div>
-                    <div className="group-hover:opacity-0 opacity-100 w-[24px] group-hover:w-0 transition-all">
-                      {
-                        element.metadata?.icon ? <div>{element.metadata?.icon}</div>
-                          : <Icon icon="mdi:hashtag" width="20" height="20" />
-                      }
-                    </div>
-                  </div>
-                </EmojiPick>
-              ) : (
-                <EmojiPick element={element}>
-                  <div>
-                    {
-                      element.metadata?.icon ? element.metadata?.icon : <Icon icon="mdi:hashtag" width="20" height="20" />
+                <div className="flex items-center justify-center h-[24px]">
+                  <div className="flex items-center justify-center group-hover:opacity-100 opacity-0 w-0 h-0 group-hover:w-[24px] group-hover:h-[24px] transition-all" >
+                    {isExpanded ?
+                      <Icon icon="gravity-ui:caret-down" className="transition-all" width="20" height="20" />
+                      : <Icon icon="gravity-ui:caret-right" className="transition-all" width="20" height="20" />
                     }
                   </div>
-                </EmojiPick>
+                  <div className="group-hover:opacity-0 opacity-100 w-[24px] group-hover:w-0 transition-all">
+                    {
+                      element.metadata?.icon ? <Emoji icon={element.metadata?.icon  as string} />
+                        : <Icon icon="mdi:hashtag" width="20" height="20" />
+                    }
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <Emoji icon={element.metadata?.icon as string} />
+                </div>
               )}
 
               <div className="truncate overflow-hidden whitespace-nowrap" title={element.name}>
@@ -117,7 +149,42 @@ export const TagListPanel = observer(() => {
                   <Icon className="ml-auto group-hover:opacity-100 opacity-0 transition-all group-hover:translate-x-0 translate-x-2" icon="ri:more-fill" width="20" height="20" />
                 </DropdownTrigger>
                 <DropdownMenu aria-label="Static Actions">
-                  <DropdownItem key="delete" onClick={async () => {
+                  {
+                    blinko.showAi ? <DropdownItem key="aiEmoji" onClick={async () => {
+                      if (!isPc) {
+                        eventBus.emit('close-sidebar')
+                      }
+                      await RootStore.Get(AiStore).autoEmoji.call(Number(element.id!), element.name)
+                    }}>
+                      <div className="flex items-center gap-2">
+                        <Icon icon="ri:robot-line" width="20" height="20" />
+                        {t('ai-emoji')}
+                      </div>
+                    </DropdownItem> : <></>
+                  }
+                  <DropdownItem key="aiEmoji" onClick={async () => {
+                    if (!isPc) {
+                      eventBus.emit('close-sidebar')
+                    }
+                    ShowCustomIconPicker(element, theme)
+                  }}>
+                    <div className="flex items-center gap-2">
+                      <Icon icon="ri:star-smile-line" width="20" height="20" />
+                      {t('custom-icon')}
+                    </div>
+                  </DropdownItem>
+                  <DropdownItem key="updateIcon" onClick={async () => {
+                    if (!isPc) {
+                      eventBus.emit('close-sidebar')
+                    }
+                    ShowEmojiPicker(element, theme)
+                  }}>
+                    <div className="flex items-center gap-2">
+                      <Icon icon="gg:smile" width="20" height="20" />
+                      {t('update-tag-icon')}
+                    </div>
+                  </DropdownItem>
+                  <DropdownItem key="Update" onClick={async () => {
                     if (!isPc) {
                       eventBus.emit('close-sidebar')
                     }
@@ -132,19 +199,27 @@ export const TagListPanel = observer(() => {
                         router.push('/all')
                       }
                     })
-
-                  }}>
-                    Update name
+                  }}  >
+                    <div className="flex items-center gap-2">
+                      <Icon icon="ic:outline-drive-file-rename-outline" width="20" height="20" />
+                      {t('update-name')}
+                    </div>
                   </DropdownItem>
-                  <DropdownItem key="delete" className="text-danger" color="danger" onClick={async () => {
+                  <DropdownItem key="deletetag" className="text-danger" color="danger" onClick={async () => {
                     PromiseCall(api.tags.deleteOnlyTag.mutate(({ id: element.id as number })))
                   }}>
-                    Delete only tag
+                    <div className="flex items-center gap-2">
+                      <Icon icon="hugeicons:delete-02" width="20" height="20" />
+                      {t('delete-only-tag')}
+                    </div>
                   </DropdownItem>
                   <DropdownItem key="delete" className="text-danger" color="danger" onClick={async () => {
                     PromiseCall(api.tags.deleteTagWithAllNote.mutate(({ id: element.id as number })))
                   }}>
-                    Delete tag with note
+                    <div className="flex items-center gap-2">
+                      <Icon icon="hugeicons:delete-02" width="20" height="20" />
+                      {t('delete-tag-with-note')}
+                    </div>
                   </DropdownItem>
                 </DropdownMenu>
               </Dropdown>

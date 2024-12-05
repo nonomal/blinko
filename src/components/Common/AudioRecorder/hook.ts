@@ -76,10 +76,17 @@ const useAudioRecorder: (
       .getUserMedia({ audio: audioTrackConstraints ?? true })
       .then((stream) => {
         setIsRecording(true);
-        const recorder: MediaRecorder = new MediaRecorder(
-          stream,
-          mediaRecorderOptions
-        );
+        
+        let options = mediaRecorderOptions || {};
+        if (!options.mimeType) {
+          if (MediaRecorder.isTypeSupported('audio/mp4')) {
+            options.mimeType = 'audio/mp4';
+          } else if (MediaRecorder.isTypeSupported('audio/webm')) {
+            options.mimeType = 'audio/webm';
+          }
+        }
+
+        const recorder: MediaRecorder = new MediaRecorder(stream, options);
         setMediaRecorder(recorder);
         recorder.start();
         _startTimer();

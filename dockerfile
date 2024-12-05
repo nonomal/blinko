@@ -25,6 +25,7 @@ FROM node:18-alpine AS runner
 
 # RUN apk add --no-cache postgresql14-client
 RUN npm install -g prisma
+RUN apk add --no-cache curl tzdata
 WORKDIR /app
 
 COPY --from=builder /app/next.config.js ./

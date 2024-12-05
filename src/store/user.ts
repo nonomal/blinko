@@ -8,6 +8,10 @@ import { eventBus } from '@/lib/event';
 import { makeAutoObservable } from 'mobx';
 import { PromiseState } from './standard/PromiseState';
 import { api } from '@/lib/trpc';
+import { BlinkoStore } from './blinkoStore';
+import { BaseStore } from './baseStore';
+import { useTranslation } from 'react-i18next';
+import { useTheme } from 'next-themes';
 
 export class UserStore implements User, Store {
   sid = 'user';
@@ -46,6 +50,10 @@ export class UserStore implements User, Store {
     return !!this.token;
   }
 
+  get blinko() {
+    return RootStore.Get(BlinkoStore)
+  }
+
   userInfo = new PromiseState({
     function: async (id: number) => {
       return await api.users.detail.query({ id })
@@ -68,6 +76,8 @@ export class UserStore implements User, Store {
 
   use() {
     const { data: session } = useSession();
+    const { t, i18n } = useTranslation()
+    const { setTheme } = useTheme()
     const router = useRouter()
     useEffect(() => {
       const userStore = RootStore.Get(UserStore);
@@ -75,7 +85,11 @@ export class UserStore implements User, Store {
         console.log(session.user)
         //@ts-ignore
         userStore.ready({ ...session.user, token: session.token });
-        this.userInfo.call(Number(this.id))
+        userStore.userInfo.call(Number(this.id)).then(async () => {
+          const config = userStore.blinko.config.value || await userStore.blinko.config.getOrCall();
+          setTheme(config?.theme ?? 'light')
+          RootStore.Get(BaseStore).changeLanugage(i18n, config?.language ?? 'en');
+        });
       }
     }, [session]);
 

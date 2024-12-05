@@ -1,13 +1,11 @@
 import '../styles/globals.css';
 import '../styles/nprogress.css';
-import '../styles/editor.css';
 import '../styles/github-markdown.css';
 import "swagger-ui-react/swagger-ui.css";
 import 'react-photo-view/dist/react-photo-view.css';
 import '@/lib/i18n'
 import NProgress from 'nprogress';
 import React from 'react';
-import TagSelectPop from '@/components/Common/TagSelectPop';
 import { ThemeProvider } from 'next-themes';
 import { SessionProvider } from 'next-auth/react';
 import { NextUIProvider } from '@nextui-org/react';
@@ -17,6 +15,8 @@ import { initStore } from '@/store/init';
 import { Inspector, InspectParams } from 'react-dev-inspector';
 import { CommonLayout } from '@/components/Layout';
 import { AppProvider } from '@/store/module/AppProvider';
+import { motion } from 'framer-motion';
+import { BlinkoMultiSelectPop } from '@/components/BlinkoMultiSelectPop';
 
 const MyApp = ({ Component, pageProps }) => {
   initStore();
@@ -36,9 +36,16 @@ const MyApp = ({ Component, pageProps }) => {
         <AppProvider />
         <NextUIProvider>
           <ThemeProvider attribute="class" enableSystem={false} >
-            <TagSelectPop />
             <CommonLayout>
-              <Component {...pageProps} />
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.3 }}
+              >
+                <Component {...pageProps} />
+                <BlinkoMultiSelectPop />
+              </motion.div>
             </CommonLayout>
           </ThemeProvider>
         </NextUIProvider>
@@ -50,18 +57,12 @@ const MyApp = ({ Component, pageProps }) => {
 export default MyApp;
 
 const useProgressBar = () => {
-  let timer: NodeJS.Timeout | null = null;
-  const stopDelayMs = 200;
-
   const routeChangeStart = () => {
     NProgress.start();
   };
 
   const routeChangeEnd = () => {
-    timer && clearTimeout(timer);
-    timer = setTimeout(() => {
-      NProgress.done(true);
-    }, stopDelayMs);
+    NProgress.done(true);
   };
 
   useEffect(() => {

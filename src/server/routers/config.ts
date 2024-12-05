@@ -1,40 +1,57 @@
 import { router, authProcedure, superAdminAuthMiddleware } from '../trpc';
 import { z } from 'zod';
 import { prisma } from '../prisma';
-import { GlobalConfig, ZConfigKey, ZConfigSchema } from '../types';
+import { GlobalConfig, ZConfigKey, ZConfigSchema, ZUserPerferConfigKey } from '../types';
 import { configSchema } from '@/lib/prismaZodType';
 
-export const getGlobalConfig = async () => {
-  const config = await prisma.config.findMany()
-  const globalConfig = config.reduce((acc, item) => {
-    const config = item.config as { type: string, value: any }
-    acc[item.key] = config.value
-    return acc
-  }, {})
-  return globalConfig as GlobalConfig
-}
+export const getGlobalConfig = async (ctx?: { id?: string }) => {
+  const userId = Number(ctx?.id ?? 1);
+  const configs = await prisma.config.findMany();
+  
+  const globalConfig = configs.reduce((acc, item) => {
+    const config = item.config as { type: string, value: any };
+    const isUserPreferConfig = ZUserPerferConfigKey.safeParse(item.key).success;
+    if ((isUserPreferConfig && item.userId === userId) || (!isUserPreferConfig)) {
+      acc[item.key] = config.value;
+    }
+    return acc;
+  }, {} as Record<string, any>);
+  
+  return globalConfig as GlobalConfig;
+};
 
 export const configRouter = router({
   list: authProcedure
     .meta({ openapi: { method: 'GET', path: '/v1/config/list', summary: 'Query user config list', protect: true, tags: ['Config'] } })
     .input(z.void())
     .output(ZConfigSchema)
-    .query(async function () {
-      return await getGlobalConfig()
+    .query(async function ({ ctx }) {
+      return await getGlobalConfig(ctx)
     }),
-  update: authProcedure.use(superAdminAuthMiddleware)
+  update: authProcedure
     .meta({ openapi: { method: 'POST', path: '/v1/config/update', summary: 'Update user config', protect: true, tags: ['Config'] } })
     .input(z.object({
       key: ZConfigKey,
       value: z.any()
     }))
     .output(configSchema)
-    .mutation(async function ({ input }) {
+    .mutation(async function ({ input, ctx }) {
+      const userId = Number(ctx.id)
       const { key, value } = input
-      const hasKey = await prisma.config.findFirst({ where: { key } })
-      if (hasKey) {
-        return await prisma.config.update({ where: { id: hasKey.id }, data: { config: { type: typeof value, value } } })
+      const isUserPreferConfig = ZUserPerferConfigKey.safeParse(key).success;
+      if (isUserPreferConfig) {
+        const hasKey = await prisma.config.findFirst({ where: { userId, key } })
+        if (hasKey) {
+          return await prisma.config.update({ where: { id: hasKey.id }, data: { config: { type: typeof value, value } } })
+        }
+        return await prisma.config.create({ data: { userId, key, config: { type: typeof value, value } } })
+      } else {
+        // global config
+        const hasKey = await prisma.config.findFirst({ where: { key } })
+        if (hasKey) {
+          return await prisma.config.update({ where: { id: hasKey.id }, data: { config: { type: typeof value, value } } })
+        }
+        return await prisma.config.create({ data: { key, config: { type: typeof value, value } } })
       }
-      return await prisma.config.create({ data: { key, config: { type: typeof value, value } } })
     }),
 })

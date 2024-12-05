@@ -115,7 +115,7 @@ const TasksPanel = observer(() => {
                     {/* @ts-ignore  */}
                     {i.output?.filePath}
                     {/* @ts-ignore  */}
-                    <Icon className='cursor-pointer' onClick={e => helper.download.downloadByLink(i?.output?.apiPath)} className="cursor-pointer" icon="tabler:download" width="24" height="24" />
+                    <Icon className='cursor-pointer' onClick={e => helper.download.downloadByLink(i?.output?.filePath)} className="cursor-pointer" icon="tabler:download" width="24" height="24" />
                   </>
                 }
               </div>

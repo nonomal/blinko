@@ -112,8 +112,15 @@ export const helper = {
     }
     return null
   },
-  getFileType(filename: string): FileType['previewType'] {
+  getFileType(mimeType: string, filename: string): FileType['previewType'] {
     const extension = helper.getFileExtension(filename) ?? ''
+
+    if (mimeType != '') {
+      if (mimeType.startsWith('audio')) return 'audio'
+      if (mimeType.startsWith('video')) return 'video'
+      if (mimeType.startsWith('image')) return 'image'
+    }
+
     if ('jpeg/jpg/png/bmp/tiff/tif/webp/svg'.includes(extension?.toLowerCase() ?? null)) {
       return 'image'
     }
@@ -212,7 +219,19 @@ export const helper = {
   },
   env: {
     //@ts-ignore
-    isBrowser: typeof window === 'undefined' ? false : true
+    isBrowser: typeof window === 'undefined' ? false : true,
+    isIOS: () => {
+      try {
+        const userAgent = window.navigator.userAgent.toLowerCase();
+        const isIPad = /ipad/.test(userAgent);
+        const isIPhone = /iphone/.test(userAgent);
+        const isIPod = /ipod/.test(userAgent);
+        const isMacOS = /macintosh/.test(userAgent) && navigator.maxTouchPoints > 0;
+        return isIPad || isIPhone || isIPod || isMacOS;
+      } catch (error) {
+        return false
+      }
+    }
   },
   cron: {
     human(cronTime: string) {

@@ -100,6 +100,8 @@ export const BasicSetting = observer(() => {
         <Button startContent={<Icon icon="humbleicons:logout" width="20" height="20" />} size='sm' color='danger' onClick={async () => {
           await signOut({ redirect: false })
           router.push('/signin')
+          localStorage.removeItem('username')
+          localStorage.removeItem('password')
         }}> {t('logout')}</Button>
       } />
 

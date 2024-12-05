@@ -8,14 +8,15 @@ import { makeAutoObservable } from "mobx";
 export class DialogStore implements Store {
   sid = "DialogStore";
   provider = () => <Provider />;
-
   isOpen = false;
   preventClose = false;
   placement: "center" | "auto" | "top" | "bottom" | "top-center" | "bottom-center";
   title = "";
-  size: "sm" | "md" | "lg" | "xl" | "2xl" | "full" | "xs" | "3xl" | "4xl" | "5xl" = "md";
+  noPadding = false;
+  size: "sm" | "md" | "lg" | "xl" | "2xl" | "full" | "xs" | "3xl" | "4xl" | "5xl" | 'full' = "md";
   onlyContent = false;
   className: string = "";
+  transparent = false;
   classNames?: SlotsToClasses<ModalSlots>;
   theme = "default";
   content: React.ReactNode | ((props: any) => React.ReactNode) = "";

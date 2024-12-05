@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from "react";
-import { Button, ScrollShadow, Image, Input, Popover, PopoverTrigger, PopoverContent, Card, Badge } from "@nextui-org/react";
+import React, { useEffect, useRef, useState } from "react";
+import { Button, ScrollShadow, Image, Input, Popover, PopoverTrigger, PopoverContent, Card, Badge, Tooltip } from "@nextui-org/react";
 import { Icon } from "@iconify/react";
 import { UserStore } from "@/store/user";
 import Link from "next/link";
@@ -14,11 +14,13 @@ import { useTranslation } from "react-i18next";
 import { BaseStore } from "@/store/baseStore";
 import { BlinkoAi } from "../BlinkoAi";
 import { ScrollArea } from "../Common/ScrollArea";
-import { BlinkoNewVersion } from "../BlinkoNewVersion";
 import { BlinkoRightClickMenu } from '@/components/BlinkoRightClickMenu';
 import { useMediaQuery } from "usehooks-ts";
 import { push as Menu } from 'react-burger-menu';
 import { eventBus } from "@/lib/event";
+import TagSelectPop from "../Common/PopoverFloat/tagSelectPop";
+import AiWritePop from "../Common/PopoverFloat/aiWritePop";
+import { createPortal } from "react-dom";
 
 export const SideBarItem = "p-2 flex flex-row items-center cursor-pointer gap-2 hover:bg-hover rounded-xl transition-all"
 export const CommonLayout = observer(({
@@ -38,9 +40,9 @@ export const CommonLayout = observer(({
   const blinkoStore = RootStore.Get(BlinkoStore)
   const base = RootStore.Get(BaseStore)
 
-  let debounceSearch = _.debounce(() => {
+  const throttleSearchRef = useRef(_.throttle(() => {
     blinkoStore.noteList.resetAndCall({})
-  })
+  }, 1000, { trailing: true, leading: false }));
 
   blinkoStore.use()
   user.use()
@@ -72,7 +74,6 @@ export const CommonLayout = observer(({
         {
           theme == 'dark' ? <Image src="/logo-dark.svg" width={100} /> : <Image src="/logo.svg" width={100} />
         }
-        <BlinkoNewVersion />
       </div>
       <ScrollShadow className="-mr-[16px] mt-[-5px] h-full max-h-full pr-6 ">
         <div>
@@ -90,7 +91,6 @@ export const CommonLayout = observer(({
                 </Link>
               })
             }
-
             <div>
               {blinkoStore.tagList.value?.listTags.length != 0 && blinkoStore.tagList.value?.listTags && <>
                 <TagListPanel />
@@ -99,7 +99,7 @@ export const CommonLayout = observer(({
           </div>
         </div>
       </ScrollShadow>
-      <div className="absolute inset-0 h-[250px] w-[250px] overflow-hidden blur-3xl z-[0] pointer-events-none">
+      <div className="halation absolute inset-0 h-[250px] w-[250px] overflow-hidden blur-3xl z-[0] pointer-events-none">
         <div className="w-full h-[100%] bg-[#ffc65c] opacity-20"
           style={{ "clipPath": "circle(35% at 50% 50%)" }} />
       </div>
@@ -109,8 +109,10 @@ export const CommonLayout = observer(({
   return (
     <div className="flex w-full h-mobile-full overflow-x-hidden" id="outer-container">
       {
-        blinkoStore.showAi && <BlinkoAi />
+        blinkoStore.showAi && createPortal(<BlinkoAi />, document.body)
       }
+      <TagSelectPop />
+      <AiWritePop />
       <Menu disableAutoFocus onClose={() => setisOpen(false)} onOpen={setisOpen} isOpen={isOpen} pageWrapId={'page-wrap'} outerContainerId={'outer-container'}>
         {SideBarContent}
       </Menu>
@@ -124,9 +126,9 @@ export const CommonLayout = observer(({
               style={{ "clipPath": "circle(50% at 50% 50%)" }} />
           </div>
           <div className="flex max-w-full items-center gap-2 md:p-2 w-full z-[1]">
-            <Button
+            {!isPc && <Button
               isIconOnly
-              className="flex sm:hidden"
+              className="flex"
               size="sm"
               variant="light"
               onClick={() => setisOpen(!isOpen)}
@@ -137,7 +139,7 @@ export const CommonLayout = observer(({
                 icon="solar:hamburger-menu-outline"
                 width={24}
               />
-            </Button>
+            </Button>}
             <div className="w-full truncate text-xl font-normal md:font-bold text-default-700 flex gap-2 items-center justify-center">
               <div className="w-[4px] h-[16px] bg-primary rounded-xl" />
               {/* @ts-ignore */}
@@ -148,11 +150,11 @@ export const CommonLayout = observer(({
                 size={isPc ? 'md' : 'sm'}
                 variant="flat"
                 aria-label="search"
-                className={`ml-auto w-[200px] md:w-[300px]`}
+                className={`ml-auto w-[200px] md:w-[300px] ${blinkoStore.noteListFilterConfig.isUseAiQuery ? 'input-highlight' : ''}`}
                 classNames={{
                   base: "px-1 mr-1 w-[full] md:w-[300px]",
-                  inputWrapper:
-                    "bg-default-400/20 data-[hover=true]:bg-default-500/30 group-data-[focus=true]:bg-default-500/20",
+                  inputWrapper: `bg-default-400/20 data-[hover=true]:bg-default-500/30 group-data-[focus=true]:bg-default-500/20 ${blinkoStore.noteListFilterConfig.isUseAiQuery ? 'border-2 border-primary' : ''
+                    }`,
                   input: "placeholder:text-default-600 group-data-[has-value=true]:text-foreground",
                 }}
                 disabled={router.pathname == '/resources'}
@@ -161,10 +163,26 @@ export const CommonLayout = observer(({
                 value={blinkoStore.noteListFilterConfig.searchText}
                 onChange={e => {
                   blinkoStore.noteListFilterConfig.searchText = e.target.value
-                  debounceSearch?.()
+                  throttleSearchRef.current()
                 }}
                 startContent={
                   <Icon className="text-default-600 [&>g]:stroke-[2px]" icon="lets-icons:search" width="24" height="24" />
+                }
+                endContent={
+                 <Tooltip content={t('ai-enhanced-search')}>
+                   <Icon
+                    className="text-default-600 [&>g]:stroke-[2px] cursor-pointer hover:text-primary transition-colors"
+                    icon="mingcute:ai-line"
+                    width="24"
+                    height="24"
+                    onClick={() => {
+                      blinkoStore.noteListFilterConfig.isUseAiQuery = !blinkoStore.noteListFilterConfig.isUseAiQuery
+                      if (blinkoStore.noteListFilterConfig.searchText != '') {
+                        throttleSearchRef.current()
+                      }
+                    }}
+                  />
+                 </Tooltip>
                 }
               />
               <Popover placement="bottom-start">
@@ -209,7 +227,7 @@ export const CommonLayout = observer(({
         {/* backdrop  */}
 
         <ScrollArea onBottom={() => { }} className="flex h-[calc(100%_-_70px)] overflow-y-scroll scroll-container">
-          <div className="relative flex h-full w-full flex-col rounded-medium " >
+          <div className="relative flex h-full w-full flex-col rounded-medium layout-container" >
             {children}
           </div>
         </ScrollArea>

@@ -71,7 +71,7 @@ export const UserSetting = observer(() => {
       } />
 
     <Item
-      leftContent={blinko.userList.value ? <Table shadow="none" className="mb-2">
+      leftContent={blinko.userList.value ? <Table shadow="none" className="mb-2 max-h-[300px] overflow-y-auto">
         <TableHeader>
           <TableColumn>{t('name-db')}</TableColumn>
           <TableColumn>{t('role')}</TableColumn>

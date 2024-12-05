@@ -40,4 +40,5 @@ export type FileType = {
   extension: string
   preview: any
   uploadPromise: PromiseState<any>
+  type: string // audio/webm
 }

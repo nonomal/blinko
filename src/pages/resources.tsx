@@ -14,6 +14,7 @@ import { showTipsDialog } from "@/components/Common/TipsDialog";
 import { useTranslation } from "react-i18next";
 import { PromiseCall } from "@/store/standard/PromiseState";
 import { DialogStore } from "@/store/module/Dialog";
+import { FilesAttachmentRender } from "@/components/Common/AttachmentRender";
 
 const Page = observer(() => {
   const blinko = RootStore.Get(BlinkoStore)
@@ -28,15 +29,7 @@ const Page = observer(() => {
           blinko.resourceList.value?.map(i => {
             const extension = helper.getFileExtension(i.path)
             return <Card shadow="none" className="group bg-background cursor-pointer px-4 pt-4 mb-4 pb-2 flex flex-col gap-2 items-center">
-              {
-                helper.getFileType(i.path) == 'image' ?
-                  <PhotoView width={150} src={i.path} >
-                    <Image radius="sm" className="w-full" src={i.path} alt='' />
-                  </PhotoView> :
-                  <div className="w-[60px] ">
-                    <FileIcon extension={extension} {...defaultStyles[extension ?? '']} />
-                  </div>
-              }
+              <FilesAttachmentRender files={[i]} preview columns={1}/>
               <div className="w-full break-words whitespace-normal text-xs font-bold">{decodeURIComponent(i.name)}</div>
               <div className="w-full break-words whitespace-normal text-xs text-desc flex">
                 <div>{dayjs(i.createdAt).fromNow()}</div>

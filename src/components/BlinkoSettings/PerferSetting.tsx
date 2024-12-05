@@ -1,25 +1,44 @@
 import { observer } from "mobx-react-lite";
-import { Card, Select, SelectItem, Switch } from "@nextui-org/react";
+import { Card, DropdownItem, DropdownMenu, DropdownTrigger, Dropdown, Select, SelectItem, Switch, Button, Input } from "@nextui-org/react";
 import { useTranslation } from "react-i18next";
-import { Item } from "./Item";
+import { Item, ItemWithTooltip, SelectDropdown } from "./Item";
 import ThemeSwitcher from "../Common/ThemeSwitcher";
 import LanguageSwitcher from "../Common/LanguageSwitcher";
 import { RootStore } from "@/store";
 import { BlinkoStore } from "@/store/blinkoStore";
 import { PromiseCall } from "@/store/standard/PromiseState";
 import { api } from "@/lib/trpc";
+import { useState, useEffect } from "react";
+import { useMediaQuery } from "usehooks-ts";
 
 export const PerferSetting = observer(() => {
   const { t } = useTranslation()
+  const isPc = useMediaQuery('(min-width: 768px)')
   const blinko = RootStore.Get(BlinkoStore)
+  const [textLength, setTextLength] = useState(blinko.config.value?.textFoldLength?.toString() || '500');
+
+  useEffect(() => {
+    setTextLength(blinko.config.value?.textFoldLength?.toString() || '500');
+  }, [blinko.config.value?.textFoldLength]);
+
   return <Card shadow="none" className="flex flex-col p-4 bg-background">
     <div className='text-desc text-sm'>{t('preference')}</div>
     <Item
       leftContent={<>{t('theme')}</>}
-      rightContent={<ThemeSwitcher />} />
+      rightContent={<ThemeSwitcher onChange={async value => {
+        return await PromiseCall(api.config.update.mutate({
+          key: 'theme',
+          value: value
+        }))
+      }} />} />
     <Item
       leftContent={<>{t('language')}</>}
-      rightContent={<LanguageSwitcher />} />
+      rightContent={<LanguageSwitcher value={blinko.config.value?.language} onChange={value => {
+        PromiseCall(api.config.update.mutate({
+          key: 'language',
+          value: value
+        }))
+      }} />} />
     <Item
       leftContent={<>{t('show-navigation-bar-on-mobile')}</>}
       rightContent={<Switch
@@ -43,47 +62,124 @@ export const PerferSetting = observer(() => {
           }))
         }}
       />} />
+
+    <Item
+      leftContent={<ItemWithTooltip
+        content={t('text-fold-length')}
+        toolTipContent={<div className="w-[300px] flex gap-2 py-4 px-2">
+          <div className="min-w-[80px] min-h-[80px] bg-default-100 rounded-lg"></div>
+          <div className="flex flex-col gap-2 flex-1">
+            <div className="text-md font-medium">{t('title-first-line-of-the-text')}</div>
+            <div className="text-sm text-default-400 line-clamp-2">{t('content-rest-of-the-text-if-the-text-is-longer-than-the-length')}</div>
+          </div>
+        </div>}
+      />}
+      rightContent={
+        <div className="flex items-center gap-2">
+          <Input
+            type="number"
+            size='sm'
+            className='w-20'
+            value={textLength}
+            onChange={e => setTextLength(e.target.value)}
+            onBlur={e => {
+              const value = parseInt(e.target.value);
+              if (!isNaN(value)) {
+                PromiseCall(api.config.update.mutate({
+                  key: 'textFoldLength',
+                  value: value
+                }));
+              }
+            }}
+            min={0}
+          />
+          <span className="text-sm text-default-400">{t('chars')}</span>
+        </div>
+      }
+    />
+
+    <Item
+      type={isPc ? 'row' : 'col'}
+      leftContent={<ItemWithTooltip content={t('device-card-columns')} toolTipContent={<div className="w-[300px] flex flex-col gap-2">
+        <div>{t('columns-for-different-devices')}</div>
+      </div>} />}
+      rightContent={<div className="flex gap-2 w-full justify-end">
+        <SelectDropdown
+          value={blinko.config.value?.smallDeviceCardColumns}
+          placeholder={t('mobile')}
+          icon="proicons:phone"
+          options={[
+            { key: "1", label: "1" },
+            { key: "2", label: "2" }
+          ]}
+          onChange={async (value) => {
+            await PromiseCall(api.config.update.mutate({
+              key: 'smallDeviceCardColumns',
+              value: value
+            }))
+          }}
+        />
+        <SelectDropdown
+          value={blinko.config.value?.mediumDeviceCardColumns}
+          placeholder={t('tablet')}
+          icon="tabler:device-ipad"
+          options={[
+            { key: "1", label: "1" },
+            { key: "2", label: "2" },
+            { key: "3", label: "3" },
+            { key: "4", label: "4" },
+          ]}
+          onChange={async (value) => {
+            await PromiseCall(api.config.update.mutate({
+              key: 'mediumDeviceCardColumns',
+              value: value
+            }))
+          }}
+        />
+        <SelectDropdown
+          value={blinko.config.value?.largeDeviceCardColumns}
+          placeholder={t('desktop')}
+          icon="ic:outline-tv"
+          options={[
+            { key: "1", label: "1" },
+            { key: "2", label: "2" },
+            { key: "3", label: "3" },
+            { key: "4", label: "4" },
+          ]}
+          onChange={async (value) => {
+            await PromiseCall(api.config.update.mutate({
+              key: 'largeDeviceCardColumns',
+              value: value
+            }))
+          }}
+        />
+      </div>}
+    />
+
     <Item
       leftContent={<>{t('time-format')}</>}
       rightContent={
-        <div>
-          <Select
-            onChange={async e => {
-              console.log(e.target.value)
-              await PromiseCall(api.config.update.mutate({
-                key: 'timeFormat',
-                value: e.target.value
-              }))
-            }}
-            value={blinko.config.value?.timeFormat}
-            size="sm" label={blinko.config.value?.timeFormat ?? 'Select a time format'} className="w-[200px] md:w-[300px]">
-            <SelectItem key="relative" value="relative">
-              1 seconds ago
-            </SelectItem>
-            <SelectItem key="YYYY-MM-DD" value="YYYY-MM-DD">
-              2024-01-01 {/*  2024-03-20 */}
-            </SelectItem>
-            <SelectItem key="YYYY-MM-DD HH:mm" value="YYYY-MM-DD HH:mm">
-              2024-01-01 15:30 {/*  2024-03-20 15:30 */}
-            </SelectItem>
-            <SelectItem key="HH:mm" value="HH:mm">
-              15:30 {/*  15:30 */}
-            </SelectItem>
-            <SelectItem key="YYYY-MM-DD HH:mm:ss" value="YYYY-MM-DD HH:mm:ss">
-              2024-01-01 15:30:45 {/*  2024-03-20 15:30:45 */}
-            </SelectItem>
-            <SelectItem key="MM-DD HH:mm" value="MM-DD HH:mm">
-              03-20 15:30 {/*  03-20 15:30 */}
-            </SelectItem>
-            <SelectItem key="MMM DD, YYYY" value="MMM DD, YYYY">
-              Mar 20, 2024 {/*  Mar 20, 2024 */}
-            </SelectItem>
-            <SelectItem key="MMM DD, YYYY HH:mm" value="MMM DD, YYYY HH:mm">
-              Mar 20, 2024 15:30 {/* Mar 20, 2024 15:30 */}
-            </SelectItem>
-          </Select>
-        </div>
+        <SelectDropdown
+          value={blinko.config.value?.timeFormat}
+          placeholder="Select a time format"
+          icon="mingcute:time-line"
+          options={[
+            { key: "relative", label: "1 seconds ago" },
+            { key: "YYYY-MM-DD", label: "2024-01-01" },
+            { key: "YYYY-MM-DD HH:mm", label: "2024-01-01 15:30" },
+            { key: "HH:mm", label: "15:30" },
+            { key: "YYYY-MM-DD HH:mm:ss", label: "2024-01-01 15:30:45" },
+            { key: "MM-DD HH:mm", label: "03-20 15:30" },
+            { key: "MMM DD, YYYY", label: "Mar 20, 2024" },
+            { key: "MMM DD, YYYY HH:mm", label: "Mar 20, 2024 15:30" },
+          ]}
+          onChange={async (value) => {
+            await PromiseCall(api.config.update.mutate({
+              key: 'timeFormat',
+              value: value
+            }))
+          }}
+        />
       } />
   </Card>
-
 })

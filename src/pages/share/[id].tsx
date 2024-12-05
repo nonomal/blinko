@@ -30,7 +30,7 @@ const Page = observer(() => {
     if (!isPc) return
     const elements = document.querySelectorAll(".tilt-card");
     VanillaTilt.init(elements as any, {
-      max: 5,
+      max: 2,
       speed: 400,
       glare: true,
       "max-glare": 0.5,

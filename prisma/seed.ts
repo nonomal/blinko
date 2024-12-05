@@ -250,7 +250,7 @@ async function main() {
     }
     await prisma.notes.updateMany({ where: { accountId: null }, data: { accountId: account.id } })
   }
-  if(!account && process.env.NODE_ENV === 'development') {
+  if (!account && process.env.NODE_ENV === 'development') {
     await prisma.accounts.create({ data: { name: 'admin', password: await hashPassword('123456'), role: 'superadmin' } })
   }
 
@@ -276,6 +276,20 @@ async function main() {
       console.log(err)
     }
   })
+
+  //v0.12.11 config add user columns
+  // const configs = await prisma.config.findMany();
+  // const admin = await prisma.accounts.findFirst({ where: { role: 'superadmin' } })
+  // if (admin) {
+  //   for (const config of configs) {
+  //     if (!config.userId) {
+  //       await prisma.config.update({
+  //         where: { id: config.id },
+  //         data: { userId: admin.id }
+  //       });
+  //     }
+  //   }
+  // }
 }
 
 main()

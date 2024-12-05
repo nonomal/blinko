@@ -25,7 +25,7 @@ const AttachmentsRender = observer((props: IProps) => {
     <div className={`columns-1 md:columns-1`}>
       {files?.filter(i => i.previewType == 'video').map((file, index) => (
         <div className='group relative flex p-2 items-center gap-2 cursor-pointer tansition-all rounded-2xl'>
-          <video src={file.preview} id="player" playsInline controls className='rounded-2xl w-full z-0' />
+          <video onDoubleClick={(e) => e.stopPropagation()} src={file.preview} id="player" playsInline controls className='rounded-2xl w-full z-0' />
           {!file.uploadPromise?.loading?.value && !preview &&
             <DeleteIcon className='absolute z-10 right-[5px] top-[5px]' files={files} file={file} />
           }
@@ -40,7 +40,7 @@ const AttachmentsRender = observer((props: IProps) => {
         <div className='group relative flex p-2 items-center gap-2 cursor-pointer tansition-all rounded-2xl'>
           <audio src={file.preview} id="player" playsInline controls className='rounded-2xl w-full' />
           {!file.uploadPromise?.loading?.value && !preview &&
-            <DeleteIcon files={files} className='absolute z-10 right-[5px] top-[5px]' file={file} />
+            <DeleteIcon files={files} className='absolute z-10 right-[5px] top-[5px] group-hover:opacity-100 opacity-0' file={file} />
           }
           {preview && <DownloadIcon className='top-[8px] right-[8px]' file={file} />}
         </div>
@@ -55,11 +55,11 @@ const AttachmentsRender = observer((props: IProps) => {
           if (preview) {
             helper.download.downloadByLink(file.uploadPromise.value)
           }
-        }} className='relative flex p-2 w-full items-center gap-2 cursor-pointer bg-sencondbackground hover:bg-hover tansition-all rounded-md '>
+        }} className='relative flex p-2 w-full items-center gap-2 cursor-pointer bg-sencondbackground hover:bg-hover tansition-all rounded-md group'>
           <FileIcons path={file.name} isLoading={file.uploadPromise?.loading?.value} />
           <div className='truncate text-sm font-bold'>{file.name}</div>
           {!file.uploadPromise?.loading?.value && !preview &&
-            <DeleteIcon className='ml-auto w-[35px]' files={files} file={file} />}
+            <DeleteIcon className='ml-auto group-hover:opacity-100 opacity-0' files={files} file={file} />}
         </div>
       ))}
     </div >

@@ -8,7 +8,7 @@ import { Progress } from '@nextui-org/react'
 import { observer } from 'mobx-react-lite'
 import { useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
-export const ImportProgress = observer(() => {
+export const ImportProgress = observer(({ force }: { force: boolean }) => {
   const { t } = useTranslation()
   const blinko = RootStore.Get(BlinkoStore)
   const store = RootStore.Local(() => ({
@@ -17,7 +17,8 @@ export const ImportProgress = observer(() => {
     message: [] as ProgressResult[],
     status: '',
     get value() {
-      return Math.round((store.progress / store.total) * 100)
+      const v = Math.round((store.progress / store.total) * 100)
+      return isNaN(v) ? 0 : v
     },
     get isSuccess() {
       return store.status === 'success'
@@ -26,7 +27,7 @@ export const ImportProgress = observer(() => {
       return store.status === 'error'
     },
     handleAsyncGenerator: async () => {
-      const asyncGeneratorRes = await streamApi.ai.rebuildingEmbeddings.mutate()
+      const asyncGeneratorRes = await streamApi.ai.rebuildingEmbeddings.mutate({ force })
       for await (const item of asyncGeneratorRes) {
         console.log(item)
         store.progress = item.progress?.current ?? 0
@@ -68,10 +69,10 @@ export const ImportProgress = observer(() => {
   </div>
 })
 
-export const ShowRebuildEmbeddingProgressDialog = async () => {
+export const ShowRebuildEmbeddingProgressDialog = async (force = false) => {
   RootStore.Get(DialogStore).setData({
     title: i18n.t('rebuilding-embedding-progress'),
-    content: <ImportProgress />,
+    content: <ImportProgress force={force} />,
     isOpen: true,
     size: 'lg',
   })

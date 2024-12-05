@@ -6,6 +6,7 @@ import { RootStore } from '@/store';
 import { Button, Input, Select, SelectItem } from '@nextui-org/react';
 import { useEffect } from 'react';
 import { DialogStore } from '@/store/module/Dialog';
+import i18n from '@/lib/i18n';
 
 
 type IProps = {
@@ -49,38 +50,7 @@ export const UpdateTag = observer(({ onSave, defaultValue = '', type = 'input' }
 export const ShowUpdateTagDialog = ({ onSave, defaultValue, type }: IProps) => {
   RootStore.Get(DialogStore).setData({
     isOpen: true,
-    title: 'Update Tag Name',
+    title: i18n.t('update-tag-name'),
     content: <UpdateTag type={type} defaultValue={defaultValue} onSave={async (e) => { return await onSave?.(e) }} />
   })
 }
-
-// export const UpdatTagPop = observer(({ isOpen, onSave, value, onChange, placement = 'bottom' }: IProps) => {
-//   return <motion.div
-//     animate={isOpen ? 'show' : 'hidden'}
-//     variants={{
-//       show: {
-//         y: 5,
-//         opacity: 1,
-//         zIndex: 99
-//       },
-//       hidden: {
-//         y: 0,
-//         opacity: 0,
-//         transitionEnd: {
-//           zIndex: -50
-//         }
-//       }
-//     }}
-//     onClick={e => e.stopPropagation()}
-//     className={`absolute p-1 rounded-xl ${placement == 'bottom' ? 'top-10' : '-top-90'} left-0 opacity-0 bg-background border z-[-99] w-fit`}>
-//     <div className="px-1 py-2">
-//       <div className="text-small text-foreground font-bold mb-2">Update Tag Name</div>
-//       <div className="flex items-center gap-2">
-//         <Input size='sm' value={value} onChange={e => onChange(e.target.value)} />
-//         <Button style={{ width: '30px' }} size='sm' color="primary" onClick={async () => {
-//           onSave?.(value)
-//         }}>Save</Button>
-//       </div>
-//     </div>
-//   </motion.div>
-// })

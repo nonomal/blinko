@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { Button, Input, Checkbox, Link, Image } from "@nextui-org/react";
 import { Icon } from "@iconify/react";
 import { signIn } from "next-auth/react";
@@ -20,6 +20,8 @@ export default function Component() {
 
   const userStorage = new StorageState({ key: 'username' })
   const passwordStorage = new StorageState({ key: 'password' })
+
+
   useEffect(() => {
     try {
       RootStore.Get(UserStore).canRegister.call().then(v => {
@@ -34,6 +36,27 @@ export default function Component() {
     } catch (error) {
     }
   }, [])
+
+  const login = async () => {
+    try {
+      const res = await signIn('credentials', {
+        username: user ?? userStorage.value,
+        password: password ?? passwordStorage.value,
+        callbackUrl: '/',
+        redirect: false,
+      })
+      if (res?.ok) {
+        userStorage.setValue(user)
+        passwordStorage.setValue(password)
+        router.push('/')
+      } else {
+        RootStore.Get(ToastPlugin).error(res?.error ?? t('user-or-password-error'))
+      }
+    } catch (error) {
+      console.log(error)
+    }
+  }
+
   return (
     <div className="flex h-screen w-screen items-center justify-center bg-gradient-to-br from-rose-400 via-fuchsia-500 to-indigo-500 p-2 sm:p-4 lg:p-8">
       <div className="flex w-full max-w-sm flex-col gap-4 rounded-large bg-content1 px-8 pb-10 pt-6 shadow-large">
@@ -71,6 +94,11 @@ export default function Component() {
             type={isVisible ? "text" : "password"}
             variant="bordered"
             value={password}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                login()
+              }
+            }}
             onChange={e => setPassword(e.target.value?.trim())}
           />
           <div className="flex items-center justify-between px-1 pl-2 pr-2">
@@ -79,23 +107,7 @@ export default function Component() {
             </Checkbox>
           </div>
           <Button color="primary" onClick={async e => {
-            try {
-              const res = await signIn('credentials', {
-                username: user,
-                password,
-                callbackUrl: '/',
-                redirect: false,
-              })
-              if (res?.ok) {
-                userStorage.setValue(user)
-                passwordStorage.setValue(password)
-                router.push('/')
-              } else {
-                RootStore.Get(ToastPlugin).error(res?.error ?? t('user-or-password-error'))
-              }
-            } catch (error) {
-              console.log(error)
-            }
+            login()
           }}>
             {t('sign-in')}
           </Button>
@@ -109,6 +121,6 @@ export default function Component() {
           </p>
         }
       </div>
-    </div>
+    </div >
   );
 }

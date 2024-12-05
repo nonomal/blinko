@@ -8,12 +8,15 @@ import { NoteType } from '../types';
 import path from 'path';
 import { UPLOAD_FILE_PATH } from '@/lib/constant';
 import { unlink } from 'fs/promises';
-import { attachmentsSchema, notesSchema, tagsToNoteSchema } from '@/lib/prismaZodType';
+import { attachmentsSchema, notesSchema, tagSchema, tagsToNoteSchema } from '@/lib/prismaZodType';
 import { getGlobalConfig } from './config';
+import { FileService } from '../plugins/utils';
+import { AiService } from '../plugins/ai';
 
 const extractHashtags = (input: string): string[] => {
+  const withoutCodeBlocks = input.replace(/```[\s\S]*?```/g, '');
   const hashtagRegex = /(?<!:\/\/)(?<=\s|^)#[^\s#]+(?=\s|$)/g;
-  const matches = input.match(hashtagRegex);
+  const matches = withoutCodeBlocks.match(hashtagRegex);
   return matches ? matches : [];
 }
 
@@ -32,28 +35,50 @@ export const noteRouter = router({
       withoutTag: z.boolean().default(false).optional(),
       withFile: z.boolean().default(false).optional(),
       withLink: z.boolean().default(false).optional(),
+      isUseAiQuery: z.boolean().default(false).optional(),
     }))
     .output(z.array(notesSchema.merge(
       z.object({
         attachments: z.array(attachmentsSchema),
-        tags: z.array(tagsToNoteSchema)
+        tags: z.array(tagsToNoteSchema.merge(
+          z.object({
+            tag: tagSchema
+          }))
+        )
       }))
     ))
     .mutation(async function ({ input, ctx }) {
-      const { tagId, type, isArchived, isRecycle, searchText, page, size, orderBy, withFile, withoutTag, withLink } = input
+      const { tagId, type, isArchived, isRecycle, searchText, page, size, orderBy, withFile, withoutTag, withLink, isUseAiQuery } = input
+      if (isUseAiQuery && searchText?.trim() != '') {
+        if (page == 1) {
+          return await AiService.enhanceQuery({ query: searchText! })
+        } else {
+          return []
+        }
+      }
       let where: Prisma.notesWhereInput = {
-        isArchived, isRecycle,
+        isRecycle,
         OR: [
           { accountId: Number(ctx.id) },
           { accountId: null }
         ]
       }
+
+      if (searchText != '') {
+        where = {
+          ...where,
+          content: { contains: searchText, mode: 'insensitive' }
+        }
+      } else {
+        where.isArchived = isArchived
+        if (type != -1) {
+          where.type = type
+        }
+      }
+
       if (tagId) {
         const tags = await prisma.tagsToNote.findMany({ where: { tagId } })
         where.id = { in: tags?.map(i => i.noteId) }
-      }
-      if (searchText != '') {
-        where.content = { contains: searchText, mode: 'insensitive' }
       }
       if (withFile) {
         where.attachments = { some: {} }
@@ -69,13 +94,12 @@ export const noteRouter = router({
       }
       const config = await getGlobalConfig()
       let timeOrderBy = config?.isOrderByCreateTime ? { createdAt: orderBy } : { updatedAt: orderBy }
-      if (type != -1) { where.type = type }
       return await prisma.notes.findMany({
         where,
         orderBy: [{ isTop: "desc" }, timeOrderBy],
         skip: (page - 1) * size,
         take: size,
-        include: { tags: true, attachments: true }
+        include: { tags: { include: { tag: true } }, attachments: true }
       })
     }),
   publicList: publicProcedure
@@ -162,9 +186,10 @@ export const noteRouter = router({
     .mutation(async function ({ input, ctx }) {
       let { id, isArchived, type, attachments, content, isTop, isShare } = input
       if (content != null) {
-        content = content?.replace(/\\/g, '').replace(/&#x20;/g, ' ')
+        content = content?.replace(/&#x20;/g, ' ')?.replace(/&#x20;\\/g, '')?.replace(/\\([#<>{}[\]|`*-_.])/g, '$1');
+        // console.log({ content })
       }
-      const tagTree = helper.buildHashTagTreeFromHashString(extractHashtags(content + ' '))
+      const tagTree = helper.buildHashTagTreeFromHashString(extractHashtags(content?.replace(/\\/g, '') + ' '))
       let newTags: Prisma.tagCreateManyInput[] = []
       const handleAddTags = async (tagTree: TagTreeNode[], parentTag: Prisma.tagCreateManyInput | undefined, noteId?: number) => {
         for (const i of tagTree) {
@@ -252,7 +277,7 @@ export const noteRouter = router({
         return note
       } else {
         try {
-          const note = await prisma.notes.create({ data: { content: content ?? '', type, accountId: Number(ctx.id) } })
+          const note = await prisma.notes.create({ data: { content: content ?? '', type, accountId: Number(ctx.id), isShare: isShare ? true : false, isTop: isTop ? true : false } })
           await handleAddTags(tagTree, undefined, note.id)
           await prisma.attachments.createMany({
             data: attachments.map(i => { return { noteId: note.id, ...i } })
@@ -307,8 +332,7 @@ export const noteRouter = router({
           if (note.attachments) {
             for (const attachment of note.attachments) {
               try {
-                const filepath = path.join(process.cwd(), `${UPLOAD_FILE_PATH}/` + attachment.path.replace('/api/file/', ""))
-                await unlink(filepath)
+                await FileService.deleteFile(attachment.path)
               } catch (error) {
                 console.log(error)
               }

@@ -5,7 +5,21 @@ import { Icon } from "@iconify/react"
 import { useTranslation } from "react-i18next"
 import { useState } from "react"
 
-export const PasswordInput = observer(({ value, onChange, label, placeholder, className }: { value: string, onChange: (e: React.ChangeEvent<HTMLInputElement>) => void, label?: string, placeholder?: string, className?: string }) => {
+export const PasswordInput = observer(({ 
+  value, 
+  onChange, 
+  onBlur,
+  label, 
+  placeholder, 
+  className 
+}: { 
+  value: string, 
+  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void, 
+  onBlur?: (e: React.FocusEvent<HTMLInputElement>) => void,
+  label?: string, 
+  placeholder?: string, 
+  className?: string 
+}) => {
   const { t } = useTranslation()
   const [isConfirmVisible, setIsConfirmVisible] = useState(false)
   const toggleConfirmVisibility = () => setIsConfirmVisible(!isConfirmVisible)
@@ -35,5 +49,6 @@ export const PasswordInput = observer(({ value, onChange, label, placeholder, cl
     variant="bordered"
     value={value}
     onChange={onChange}
+    onBlur={onBlur}
   />
 })
